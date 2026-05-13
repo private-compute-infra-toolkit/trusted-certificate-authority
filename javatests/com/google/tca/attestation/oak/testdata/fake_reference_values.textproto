@@ -1,0 +1,50 @@
+# proto-file: bazel-tca/external/oak+/proto/attestation/reference_value.proto
+# proto-message: oak.attestation.v1.ReferenceValues
+#
+# Fake reference values for Oak Containers that will fail verification.
+
+oak_containers: {
+  root_layer: {
+    insecure: { }
+  }
+  kernel_layer: {
+    kernel: {
+      endorsement: {
+        endorser: {
+          keys: {
+            # Random fake key to ensure verification fails
+            raw: "\060\131\060\023\006\007\052\206\110\316\075\002\001\006\010\052\206\110\316\075\003\001\007\003\102\000\004\323\003\026\240\173\264\256\123\103\156\121\167\043\237\257\156\165\264\134\326\321\057\335\347\116\166\366\322\347\253\116\124\073\156\204\333\365\301\361\237\052\066\060\276\013\167\151\207\076\161\333\332\320\346\060\030\022\210\051\375\227\030\116\007"
+          }
+        }
+        rekor: {
+          skip: { }
+        }
+      }
+    }
+    kernel_cmd_line_text: {
+      skip: { }
+    }
+    init_ram_fs: {
+      skip: { }
+    }
+    memory_map: {
+      skip: { }
+    }
+    acpi: {
+      skip: { }
+    }
+  }
+  system_layer: {
+    system_image: {
+      skip: { }
+    }
+  }
+  container_layer: {
+    binary: {
+      skip: { }
+    }
+    configuration: {
+      skip: { }
+    }
+  }
+}

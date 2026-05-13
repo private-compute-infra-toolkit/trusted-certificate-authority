@@ -1,0 +1,367 @@
+/*
+ * Copyright 2025 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.tca.domain;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
+import static org.mockito.AdditionalMatchers.aryEq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
+
+import com.google.common.io.BaseEncoding;
+import com.google.protobuf.ByteString;
+import com.google.tca.domain.attestation.AttestationEvidence;
+import com.google.tca.domain.attestation.AttestationVerifier;
+import com.google.tca.domain.attestation.AttestationVerifierProvider;
+import com.google.tca.domain.attestation.EndorsementAnnotations;
+import com.google.tca.domain.attestation.Validity;
+import com.google.tca.domain.policy.Policy;
+import com.google.tca.domain.policy.ReferenceValues;
+import com.google.tca.domain.policy.ReferenceValuesType;
+import com.google.tca.domain.policy.X509CertificateAttributes;
+import com.google.tca.domain.policy.X509Extensions;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.cert.X509Certificate;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.bouncycastle.pkcs.PKCS10CertificationRequest;
+import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+
+@RunWith(JUnit4.class)
+public class TrustedCaServiceTest {
+
+  @Mock private X509Certificate mockRootCertificate;
+  @Mock private X509Certificate mockChildCertificate;
+  @Mock private PrivateKey mockPrivateKey;
+  @Mock private AttestationVerifierProvider mockVerifierProvider;
+  @Mock private AttestationVerifier mockAttestationVerifier;
+  @Mock private CertificateSigner mockCertificateSigner;
+  @Mock private KeyDecoder mockKeyDecoder;
+  @Mock private AttestationEvidence mockkAttestationEvidence;
+  @Mock private PolicyProvider mockPolicyProvider;
+  @Mock private TimeProvider mockTimeProvider;
+  @Mock private EndorsementMetadataProvider mockEndorsementMetadataProvider;
+  @Mock private CertificateModifiersCreator mockCertificateModifiersCreator;
+  @Mock private AudienceBindingValidator mockAudienceBindingValidator;
+
+  final Instant testTime = Instant.parse("2026-06-17T16:14:30.513000Z");
+
+  private TrustedCaService trustedCaService;
+
+  @Before
+  public void setUp() throws Exception {
+    MockitoAnnotations.initMocks(this);
+    trustedCaService =
+        new TrustedCaService(
+            mockRootCertificate,
+            mockPrivateKey,
+            mockVerifierProvider,
+            mockCertificateSigner,
+            mockKeyDecoder,
+            mockPolicyProvider,
+            mockTimeProvider,
+            mockEndorsementMetadataProvider,
+            mockCertificateModifiersCreator,
+            mockAudienceBindingValidator);
+  }
+
+  @Test
+  public void issueCertificate_validRequest_succeeds() throws Exception {
+    KeyPair keyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    PKCS10CertificationRequest csr = createTestCsr(keyPair);
+    byte[] csrBytes = csr.getEncoded();
+
+    CertificateIssuanceRequest request = createValidRequest(csrBytes);
+
+    when(mockVerifierProvider.getVerifier(any(AttestationEvidence.class)))
+        .thenReturn(Optional.of(mockAttestationVerifier));
+    when(mockAttestationVerifier.verify(
+            any(AttestationEvidence.class), any(PublicKey.class), any(ReferenceValues.class)))
+        .thenReturn(true);
+    when(mockKeyDecoder.decodeRawPublicKey(any())).thenReturn(keyPair.getPublic());
+    when(mockPolicyProvider.getPolicy(any(), any(), any()))
+        .thenReturn(Optional.of(createValidPolicy()));
+    when(mockEndorsementMetadataProvider.getAnnotations(any()))
+        .thenReturn(createValidEndorsementProperties());
+    when(mockEndorsementMetadataProvider.getValidity(any())).thenReturn(createValidity());
+    when(mockkAttestationEvidence.getReferenceValuesType()).thenReturn(ReferenceValuesType.GCP);
+    when(mockTimeProvider.now()).thenReturn(testTime);
+    when(mockCertificateModifiersCreator.create(any())).thenReturn(List.of());
+
+    TrustedCaService serviceWithRealCrypto =
+        new TrustedCaService(
+            mockRootCertificate,
+            mockPrivateKey,
+            mockVerifierProvider,
+            mockCertificateSigner,
+            mockKeyDecoder,
+            mockPolicyProvider,
+            mockTimeProvider,
+            mockEndorsementMetadataProvider,
+            mockCertificateModifiersCreator,
+            mockAudienceBindingValidator);
+
+    when(mockCertificateSigner.signCsr(
+            aryEq(csrBytes),
+            eq(mockRootCertificate),
+            eq(mockPrivateKey),
+            any(),
+            any(),
+            any(),
+            anyBoolean()))
+        .thenReturn(mockChildCertificate);
+
+    X509Certificate signedCert =
+        serviceWithRealCrypto.issueCertificate(
+            request, createIdentityWithBinding(keyPair.getPublic()));
+    assertEquals(signedCert, mockChildCertificate);
+  }
+
+  @Test
+  public void issueCertificate_mismatchedAudienceBinding_succeedsButLogsError() throws Exception {
+    KeyPair keyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    KeyPair differentKeyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    PKCS10CertificationRequest csr = createTestCsr(keyPair);
+    byte[] csrBytes = csr.getEncoded();
+
+    CertificateIssuanceRequest request = createValidRequest(csrBytes);
+
+    when(mockVerifierProvider.getVerifier(any(AttestationEvidence.class)))
+        .thenReturn(Optional.of(mockAttestationVerifier));
+    when(mockAttestationVerifier.verify(
+            any(AttestationEvidence.class), any(PublicKey.class), any(ReferenceValues.class)))
+        .thenReturn(true);
+    when(mockKeyDecoder.decodeRawPublicKey(any())).thenReturn(keyPair.getPublic());
+    when(mockPolicyProvider.getPolicy(any(), any(), any()))
+        .thenReturn(Optional.of(createValidPolicy()));
+    when(mockEndorsementMetadataProvider.getAnnotations(any()))
+        .thenReturn(createValidEndorsementProperties());
+    when(mockEndorsementMetadataProvider.getValidity(any())).thenReturn(createValidity());
+    when(mockkAttestationEvidence.getReferenceValuesType()).thenReturn(ReferenceValuesType.GCP);
+    when(mockTimeProvider.now()).thenReturn(testTime);
+    when(mockCertificateModifiersCreator.create(any())).thenReturn(List.of());
+
+    when(mockCertificateSigner.signCsr(
+            aryEq(csrBytes),
+            eq(mockRootCertificate),
+            eq(mockPrivateKey),
+            any(),
+            any(),
+            any(),
+            anyBoolean()))
+        .thenReturn(mockChildCertificate);
+
+    // Identity has binding for a different key
+    CallerIdentity identity = createIdentityWithBinding(differentKeyPair.getPublic());
+
+    X509Certificate signedCert = trustedCaService.issueCertificate(request, identity);
+    assertEquals(signedCert, mockChildCertificate);
+  }
+
+  @Test
+  public void issueCertificate_missingAudienceBinding_succeedsButLogsError() throws Exception {
+    KeyPair keyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    PKCS10CertificationRequest csr = createTestCsr(keyPair);
+    byte[] csrBytes = csr.getEncoded();
+
+    CertificateIssuanceRequest request = createValidRequest(csrBytes);
+
+    when(mockVerifierProvider.getVerifier(any(AttestationEvidence.class)))
+        .thenReturn(Optional.of(mockAttestationVerifier));
+    when(mockAttestationVerifier.verify(
+            any(AttestationEvidence.class), any(PublicKey.class), any(ReferenceValues.class)))
+        .thenReturn(true);
+    when(mockKeyDecoder.decodeRawPublicKey(any())).thenReturn(keyPair.getPublic());
+    when(mockPolicyProvider.getPolicy(any(), any(), any()))
+        .thenReturn(Optional.of(createValidPolicy()));
+    when(mockEndorsementMetadataProvider.getAnnotations(any()))
+        .thenReturn(createValidEndorsementProperties());
+    when(mockEndorsementMetadataProvider.getValidity(any())).thenReturn(createValidity());
+    when(mockkAttestationEvidence.getReferenceValuesType()).thenReturn(ReferenceValuesType.GCP);
+    when(mockTimeProvider.now()).thenReturn(testTime);
+    when(mockCertificateModifiersCreator.create(any())).thenReturn(List.of());
+
+    when(mockCertificateSigner.signCsr(
+            aryEq(csrBytes),
+            eq(mockRootCertificate),
+            eq(mockPrivateKey),
+            any(),
+            any(),
+            any(),
+            anyBoolean()))
+        .thenReturn(mockChildCertificate);
+
+    X509Certificate signedCert =
+        trustedCaService.issueCertificate(
+            request, new CallerIdentity("issuer", "subject", Set.of()));
+    assertEquals(signedCert, mockChildCertificate);
+  }
+
+  @Test
+  public void issueCertificate_unsupportedPlatform_throwsIllegalArgumentException()
+      throws Exception {
+    KeyPair keyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    PKCS10CertificationRequest csr = createTestCsr(keyPair);
+    CertificateIssuanceRequest request = createValidRequest(csr.getEncoded());
+    when(mockKeyDecoder.decodeRawPublicKey(any())).thenReturn(keyPair.getPublic());
+    when(mockPolicyProvider.getPolicy(any(), any(), any()))
+        .thenReturn(Optional.of(createValidPolicy()));
+    when(mockEndorsementMetadataProvider.getAnnotations(any()))
+        .thenReturn(createValidEndorsementProperties());
+
+    when(mockVerifierProvider.getVerifier(any(AttestationEvidence.class)))
+        .thenReturn(Optional.empty());
+    when(mockkAttestationEvidence.getReferenceValuesType()).thenReturn(ReferenceValuesType.GCP);
+
+    IllegalArgumentException e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                trustedCaService.issueCertificate(
+                    request, new CallerIdentity("test-issuer", "test-subject", Set.of())));
+    assertEquals("Unsupported attestation platform", e.getMessage());
+  }
+
+  @Test
+  public void issueCertificate_invalidToken_throwsIllegalArgumentException() throws Exception {
+    KeyPair keyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    PKCS10CertificationRequest csr = createTestCsr(keyPair);
+    CertificateIssuanceRequest request = createValidRequest(csr.getEncoded());
+    when(mockKeyDecoder.decodeRawPublicKey(any())).thenReturn(keyPair.getPublic());
+
+    when(mockVerifierProvider.getVerifier(any(AttestationEvidence.class)))
+        .thenReturn(Optional.of(mockAttestationVerifier));
+    when(mockAttestationVerifier.verify(
+            any(AttestationEvidence.class), any(PublicKey.class), any(ReferenceValues.class)))
+        .thenReturn(false);
+    when(mockPolicyProvider.getPolicy(any(), any(), any()))
+        .thenReturn(Optional.of(createValidPolicy()));
+    when(mockEndorsementMetadataProvider.getAnnotations(any()))
+        .thenReturn(createValidEndorsementProperties());
+    when(mockkAttestationEvidence.getReferenceValuesType()).thenReturn(ReferenceValuesType.GCP);
+
+    IllegalArgumentException e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                trustedCaService.issueCertificate(
+                    request, new CallerIdentity("test-issuer", "test-subject", Set.of())));
+    assertEquals("Attestation token is not valid", e.getMessage());
+  }
+
+  @Test
+  public void issueCertificate_wrongKey_throwsIllegalArgumentException() throws Exception {
+    KeyPair csrKeyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    KeyPair differentKeyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+
+    PKCS10CertificationRequest csr = createTestCsr(csrKeyPair);
+    byte[] csrBytes = csr.getEncoded();
+    CertificateIssuanceRequest request = createValidRequest(csrBytes);
+
+    when(mockVerifierProvider.getVerifier(any(AttestationEvidence.class)))
+        .thenReturn(Optional.of(mockAttestationVerifier));
+    // Verifier returns false when keys don't match
+    when(mockAttestationVerifier.verify(
+            any(AttestationEvidence.class), any(PublicKey.class), any(ReferenceValues.class)))
+        .thenReturn(false);
+    when(mockKeyDecoder.decodeRawPublicKey(any())).thenReturn(csrKeyPair.getPublic());
+    when(mockPolicyProvider.getPolicy(any(), any(), any()))
+        .thenReturn(Optional.of(createValidPolicy()));
+    when(mockEndorsementMetadataProvider.getAnnotations(any()))
+        .thenReturn(createValidEndorsementProperties());
+    when(mockkAttestationEvidence.getReferenceValuesType()).thenReturn(ReferenceValuesType.GCP);
+
+    IllegalArgumentException e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                trustedCaService.issueCertificate(
+                    request, new CallerIdentity("test-issuer", "test-subject", Set.of())));
+    assertEquals("Attestation token is not valid", e.getMessage());
+  }
+
+  private CallerIdentity createIdentityWithBinding(PublicKey publicKey) throws Exception {
+    MessageDigest md = MessageDigest.getInstance("SHA-256");
+    byte[] hash = md.digest(publicKey.getEncoded());
+    String digest = BaseEncoding.base16().lowerCase().encode(hash);
+    String audience = "https://tca.pcit.goog/v1/certificates:issue?pubkey_sha256=" + digest;
+    return new CallerIdentity("issuer", "subject", Set.of(audience));
+  }
+
+  private CertificateIssuanceRequest createValidRequest(byte[] csrBytes) {
+    return CertificateIssuanceRequest.builder()
+        .setAttestationEvidence(createEvidence())
+        .setCertificateSigningRequest(ByteString.copyFrom(csrBytes))
+        .build();
+  }
+
+  private CertificateIssuanceRequest createStubRequest() {
+    return CertificateIssuanceRequest.builder()
+        .setAttestationEvidence(createEvidence())
+        .setCertificateSigningRequest(ByteString.copyFromUtf8("foo"))
+        .build();
+  }
+
+  private AttestationEvidence createEvidence() {
+    return mockkAttestationEvidence;
+  }
+
+  private PKCS10CertificationRequest createTestCsr(KeyPair keyPair) throws Exception {
+    JcaPKCS10CertificationRequestBuilder p10Builder =
+        new JcaPKCS10CertificationRequestBuilder(new X500Name("CN=test"), keyPair.getPublic());
+    JcaContentSignerBuilder csBuilder = new JcaContentSignerBuilder("SHA256withRSA");
+    ContentSigner signer = csBuilder.build(keyPair.getPrivate());
+    return p10Builder.build(signer);
+  }
+
+  private Policy createValidPolicy() {
+    return new Policy(
+        "test-publisher",
+        "test-app",
+        "example.com",
+        "test-operator",
+        List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)),
+        new X509CertificateAttributes(
+            Duration.ofHours(1), new X509Extensions(Optional.empty(), Optional.empty())));
+  }
+
+  private EndorsementAnnotations createValidEndorsementProperties() {
+    return new EndorsementAnnotations("pub1", "wl1");
+  }
+
+  private Validity createValidity() {
+    return new Validity(testTime.minusSeconds(100), testTime.plusSeconds(1000));
+  }
+}

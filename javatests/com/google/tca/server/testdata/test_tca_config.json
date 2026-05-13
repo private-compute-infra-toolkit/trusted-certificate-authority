@@ -1,0 +1,13 @@
+{
+  "mappings": {
+    "sha256:123456789": {
+      "application_identifier": "my-private-app",
+      "expiration_time": "2126-01-01T00:00:00Z",
+      "application_publisher": "test-publisher"
+    },
+    "sha256:expired": {
+      "application_identifier": "expired-app",
+      "expiration_time": "2020-01-01T00:00:00Z"
+    }
+  }
+}

@@ -1,0 +1,279 @@
+module(
+    name = "attestation",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "bazel_skylib", version = "1.7.1")
+bazel_dep(name = "grpc-java", version = "1.71.0", repo_name = "io_grpc_grpc_java")
+bazel_dep(name = "grpc-proto", version = "0.0.0-20240627-ec30f58", repo_name = "io_grpc_grpc_proto")
+bazel_dep(name = "protobuf", version = "30.2", repo_name = "com_google_protobuf")
+bazel_dep(name = "rules_java", version = "8.12.0")
+bazel_dep(name = "rules_jvm_external", version = "6.7")
+bazel_dep(name = "rules_pkg", version = "1.0.1")
+bazel_dep(name = "rules_cc", version = "0.0.17")
+bazel_dep(name = "rules_go", version = "0.52.0", repo_name = "io_bazel_rules_go")
+bazel_dep(name = "rules_rust", version = "0.65.0")
+bazel_dep(name = "rules_oci", version = "1.8.0")
+bazel_dep(name = "rules_proto_grpc_python", version = "5.8.0")
+bazel_dep(name = "rules_python", version = "1.1.0")
+bazel_dep(name = "googleapis", version = "0.0.0-20251211-05f65958")
+bazel_dep(name = "rules_rust_prost", version = "0.68.0")
+
+# TODO: remove overrides after upgrading dependencies to newer bazel
+single_version_override(
+    module_name = "rules_cc",
+    version = "0.1.1",
+)
+
+single_version_override(
+    module_name = "rules_oci",
+    version = "1.8.0",
+)
+
+single_version_override(
+    module_name = "toolchains_llvm",
+    version = "1.4.0",
+)
+
+single_version_override(
+    module_name = "rules_pkg",
+    version = "1.0.1",
+)
+
+single_version_override(
+    module_name = "rules_rust",
+    version = "0.65.0",
+)
+
+single_version_override(
+    module_name = "aspect_bazel_lib",
+    version = "2.16.0",
+)
+
+single_version_override(
+    module_name = "rules_proto",
+    version = "7.0.2",
+)
+
+single_version_override(
+    module_name = "grpc",
+    version = "1.69.0",
+)
+
+single_version_override(
+    module_name = "bazel_skylib",
+    version = "1.7.1",
+)
+
+single_version_override(
+    module_name = "protobuf",
+    version = "30.2",
+)
+
+single_version_override(
+    module_name = "rules_java",
+    version = "8.12.0",
+)
+
+single_version_override(
+    module_name = "rules_python",
+    version = "1.1.0",
+)
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    ignore_root_user_error = True,
+    is_default = True,
+    python_version = "3.12",
+)
+use_repo(python, "python_3_12", "python_versions")
+
+bazel_dep(name = "aspect_bazel_lib", version = "2.16.0")
+bazel_dep(name = "cxx.rs", version = "1.0.186")
+bazel_dep(name = "rpmpack", version = "0.6.0", repo_name = "com_github_google_rpmpack")
+bazel_dep(name = "rules_aws", version = "0.0.0")
+local_path_override(
+    module_name = "rules_aws",
+    path = "container-tools",
+)
+
+bazel_dep(name = "pcit_api", version = "0.0.0")
+local_path_override(
+    module_name = "pcit_api",
+    path = "api",
+)
+
+bazel_dep(name = "oak", version = "0.0.0")
+archive_override(
+    module_name = "oak",
+    sha256 = "1f0dfe4a2ae3e27e689912e28f7f78fee7f6519f1980ece633fbb97bfca48f6a",
+    strip_prefix = "oak-33f295f6c62879525dba440ad0c0508bb492ae2d",
+    url = "https://github.com/project-oak/oak/archive/33f295f6c62879525dba440ad0c0508bb492ae2d.tar.gz",
+)
+
+oak_crates = use_extension("@oak//bazel/crates:extensions.bzl", "aliased_crates_repository")
+use_repo(oak_crates, "oak_crates_index")
+
+bazel_dep(name = "pcit_mbs", version = "0.0.0")
+local_path_override(
+    module_name = "pcit_mbs",
+    path = "mbs",
+)
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "confidential-federated-compute",
+    build_file_content = """
+filegroup(
+  name = "sysroot",
+  srcs = glob(["*/**"]),
+  visibility = ["//visibility:public"],
+)
+""",
+    urls = ["file:third_party/sysroot.tar.xz"],
+)
+
+bazel_dep(name = "toolchains_llvm", version = "1.4.0")
+
+llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
+llvm.toolchain(
+    name = "cpp_toolchain",
+    llvm_version = "20.1.0",
+)
+llvm.sysroot(
+    name = "cpp_toolchain",
+    label = "@confidential-federated-compute//:sysroot",
+    targets = ["linux-x86_64"],
+)
+use_repo(llvm, "cpp_toolchain")
+
+register_toolchains("@cpp_toolchain//:all")
+
+bazel_dep(name = "rules_boost", repo_name = "com_github_nelhage_rules_boost")
+archive_override(
+    module_name = "rules_boost",
+    integrity = "sha256-ZLcmvYKc2FqgLvR96ApPXxp8+sXKqhBlCK66PY/uFIo=",
+    strip_prefix = "rules_boost-e3adfd8d6733c914d2b91a65fb7175af09602281",
+    urls = ["https://github.com/nelhage/rules_boost/archive/e3adfd8d6733c914d2b91a65fb7175af09602281.tar.gz"],
+)
+
+# Version updated on 2025-05-28
+COORDINATOR_VERSION = "v1.24.0-rc01"
+
+COORDINATOR_COMMIT_HASH = "0e6d1584199a6f9cda271dd29beb7031d9af2b64"
+
+AWS_SDK_VERSION = "2.21.17"
+
+BOUNCY_CASTLE_VERSION = "1.80"
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.artifact(
+    testonly = True,
+    artifact = "testcontainers",
+    group = "org.testcontainers",
+    version = "1.21.4",
+)
+maven.artifact(
+    testonly = True,
+    artifact = "localstack",
+    group = "org.testcontainers",
+    version = "1.21.4",
+)
+maven.artifact(
+    testonly = True,
+    artifact = "guice-testlib",
+    group = "com.google.inject.extensions",
+    version = "7.0.0",
+)
+maven.artifact(
+    testonly = True,
+    artifact = "mockwebserver",
+    group = "com.squareup.okhttp3",
+    version = "4.12.0",
+)
+maven.artifact(
+    testonly = False,
+    artifact = "junit",
+    group = "junit",
+    version = "4.13.2",
+)
+maven.artifact(
+    testonly = False,
+    artifact = "truth",
+    group = "com.google.truth",
+    version = "1.4.4",
+)
+maven.install(
+    artifacts = [
+        "com.google.auto.value:auto-value-annotations:1.11.0",
+        "com.google.auto.value:auto-value:1.11.0",
+        "com.google.code.findbugs:jsr305:3.0.2",
+        "com.google.flogger:flogger:0.9",
+        "com.google.flogger:flogger-system-backend:0.9",
+        "com.google.guava:guava:33.3.1-jre",
+        "com.google.crypto.tink:tink:1.11.0",
+        "io.jsonwebtoken:jjwt-api:0.12.6",
+        "io.jsonwebtoken:jjwt-impl:0.12.6",
+        "io.jsonwebtoken:jjwt-jackson:0.12.6",
+        "com.google.truth:truth:1.4.4",
+        "org.mockito:mockito-core:3.12.4",
+        "com.google.code.gson:gson:2.11.0",
+        "com.squareup.okhttp3:mockwebserver:4.12.0",
+        "com.google.inject:guice:7.0.0",
+        "com.google.inject.extensions:guice-assistedinject:7.0.0",
+        "io.grpc:grpc-netty-shaded:1.71.0",
+        "com.beust:jcommander:1.82",
+        "com.github.ben-manes.caffeine:caffeine:3.1.8",
+        "org.bouncycastle:bcpkix-jdk18on:" + BOUNCY_CASTLE_VERSION,
+        "org.bouncycastle:bcprov-jdk18on:" + BOUNCY_CASTLE_VERSION,
+        "software.amazon.awssdk:s3:" + AWS_SDK_VERSION,
+        "software.amazon.awssdk:regions:" + AWS_SDK_VERSION,
+        "software.amazon.awssdk:imds:" + AWS_SDK_VERSION,
+        "software.amazon.awssdk:auth:" + AWS_SDK_VERSION,
+        "software.amazon.awssdk:url-connection-client:" + AWS_SDK_VERSION,
+        "dev.sigstore:sigstore-java:2.0.0-rc1",
+        "com.google.protobuf:protobuf-java:4.29.3",
+        "io.grpc:grpc-api:1.71.0",
+        "io.grpc:grpc-stub:1.71.0",
+        "io.grpc:grpc-protobuf:1.71.0",
+        "io.grpc:grpc-services:1.71.0",
+        "com.google.api.grpc:proto-google-common-protos:2.37.0",
+        "com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:2.17.1",
+        "com.augustcellars.cose:cose-java:1.1.0",
+        "jakarta.annotation:jakarta.annotation-api:3.0.0",
+        "commons-io:commons-io:2.18.0",
+        "com.google.inject.extensions:guice-testlib:7.0.0",
+        "com.linecorp.armeria:armeria:1.34.1",
+        "com.linecorp.armeria:armeria-grpc:1.34.1",
+        "org.slf4j:slf4j-jdk14:2.0.16",
+        "org.testcontainers:testcontainers:1.21.4",
+        "org.testcontainers:localstack:1.21.4",
+        "tools.jackson.core:jackson-core:3.0.3",
+    ],
+    repositories = [
+        "https://repo1.maven.org/maven2",
+    ],
+)
+use_repo(maven, "maven")
+
+# Create a repo for all crates used by Cargo-enabled targets, under "crates"
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.spec(
+    package = "cxx",
+    version = "=1.0.186",
+)
+crate.spec(
+    package = "prost",
+    version = "0.14.3",
+)
+crate.spec(
+    package = "aws-nitro-enclaves-nsm-api",
+    version = "0.4.0",
+)
+crate.spec(
+    package = "serde_bytes",
+    version = "0.11",
+)
+crate.from_specs(name = "tca_crates")
+use_repo(crate, "oak_std_crates_index", crates = "tca_crates")

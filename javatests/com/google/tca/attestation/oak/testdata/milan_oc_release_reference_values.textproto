@@ -1,0 +1,141 @@
+# proto-file: bazel-tca/external/oak+/proto/attestation/reference_value.proto
+# proto-message: oak.attestation.v1.ReferenceValues
+#
+# Endorsement-based reference values for Oak Containers (Release).
+
+oak_containers {
+  root_layer {
+    amd_sev {
+      stage0 {
+        endorsement {
+          endorser {
+            keys {
+              type: KEY_TYPE_ECDSA_P256_SHA256
+              key_id: 1
+              raw: "\060\131\060\023\006\007\052\206\110\316\075\002\001\006\010\052\206\110\316\075\003\001\007\003\102\000\004\323\003\026\240\173\264\256\123\103\156\121\167\043\237\257\156\165\264\134\326\321\057\335\347\116\166\366\322\347\253\116\124\073\156\204\333\365\301\361\237\052\066\060\276\013\167\151\207\076\161\333\332\320\346\060\030\022\210\051\375\227\030\116\007"
+            }
+          }
+          required_claims {
+            claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/10271.md"
+            claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/52637.md"
+            claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/66738.md"
+            claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/92939.md"
+          }
+          rekor {
+            verify {
+              keys {
+                type: KEY_TYPE_ECDSA_P256_SHA256
+                key_id: 1
+                raw: "\060\131\060\023\006\007\052\206\110\316\075\002\001\006\010\052\206\110\316\075\003\001\007\003\102\000\004\330\155\230\373\153\132\155\324\325\344\027\006\210\022\061\321\257\137\000\134\053\220\026\346\055\041\255\222\316\013\336\245\372\311\206\064\316\347\301\236\020\274\122\277\342\313\236\106\205\143\377\364\017\333\143\142\341\013\175\014\367\344\130\267"
+              }
+            }
+          }
+        }
+      }
+      milan {
+        minimum {
+          boot_loader: 3
+          snp: 20
+          microcode: 209
+        }
+      }
+    }
+  }
+  kernel_layer {
+    kernel {
+      endorsement {
+        endorser {
+          keys {
+            type: KEY_TYPE_ECDSA_P256_SHA256
+            key_id: 1
+            raw: "\060\131\060\023\006\007\052\206\110\316\075\002\001\006\010\052\206\110\316\075\003\001\007\003\102\000\004\335\145\176\072\124\155\022\173\042\142\110\325\143\277\035\265\107\161\141\131\071\371\162\377\111\131\113\307\062\043\034\163\212\346\212\376\040\026\024\100\102\200\373\317\275\151\253\221\224\023\331\342\056\066\342\301\273\067\177\311\250\137\245\306"
+          }
+        }
+        required_claims {
+          claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/22790.md"
+          claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/52637.md"
+          claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/92939.md"
+          claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/98982.md"
+        }
+        rekor {
+          verify {
+            keys {
+              type: KEY_TYPE_ECDSA_P256_SHA256
+              key_id: 1
+              raw: "\060\131\060\023\006\007\052\206\110\316\075\002\001\006\010\052\206\110\316\075\003\001\007\003\102\000\004\330\155\230\373\153\132\155\324\325\344\027\006\210\022\061\321\257\137\000\134\053\220\026\346\055\041\255\222\316\013\336\245\372\311\206\064\316\347\301\236\020\274\122\277\342\313\236\106\205\143\377\364\017\333\143\142\341\013\175\014\367\344\130\267"
+            }
+          }
+        }
+      }
+    }
+    kernel_cmd_line_text {
+      skip { }
+    }
+    init_ram_fs {
+      endorsement {
+        endorser {
+          keys {
+            type: KEY_TYPE_ECDSA_P256_SHA256
+            key_id: 1
+            raw: "\060\131\060\023\006\007\052\206\110\316\075\002\001\006\010\052\206\110\316\075\003\001\007\003\102\000\004\135\176\214\055\257\314\367\310\073\277\162\153\055\037\301\171\041\001\037\364\376\344\026\174\143\101\177\031\016\240\200\007\314\037\161\135\140\272\155\376\322\061\200\053\002\272\155\047\341\031\137\215\130\233\223\331\222\037\065\065\342\264\354\115"
+          }
+        }
+        required_claims {
+          claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/52637.md"
+          claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/85483.md"
+          claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/92939.md"
+        }
+        rekor {
+          verify {
+            keys {
+              type: KEY_TYPE_ECDSA_P256_SHA256
+              key_id: 1
+              raw: "\060\131\060\023\006\007\052\206\110\316\075\002\001\006\010\052\206\110\316\075\003\001\007\003\102\000\004\330\155\230\373\153\132\155\324\325\344\027\006\210\022\061\321\257\137\000\134\053\220\026\346\055\041\255\222\316\013\336\245\372\311\206\064\316\347\301\236\020\274\122\277\342\313\236\106\205\143\377\364\017\333\143\142\341\013\175\014\367\344\130\267"
+            }
+          }
+        }
+      }
+    }
+    memory_map {
+      skip { }
+    }
+    acpi {
+      skip { }
+    }
+  }
+  system_layer {
+    system_image {
+      endorsement {
+        endorser {
+          keys {
+            type: KEY_TYPE_ECDSA_P256_SHA256
+            key_id: 1
+            raw: "\060\131\060\023\006\007\052\206\110\316\075\002\001\006\010\052\206\110\316\075\003\001\007\003\102\000\004\224\052\261\223\016\104\315\101\311\154\003\117\053\303\242\353\126\030\061\075\360\031\075\141\032\173\220\266\060\174\066\057\143\276\105\151\173\313\051\057\122\375\156\205\331\020\031\316\044\341\010\067\260\025\121\230\201\215\334\142\063\337\113\306"
+          }
+        }
+        required_claims {
+          claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/52637.md"
+          claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/58963.md"
+          claim_types: "https://github.com/project-oak/oak/blob/main/docs/tr/claim/92939.md"
+        }
+        rekor {
+          verify {
+            keys {
+              type: KEY_TYPE_ECDSA_P256_SHA256
+              key_id: 1
+              raw: "\060\131\060\023\006\007\052\206\110\316\075\002\001\006\010\052\206\110\316\075\003\001\007\003\102\000\004\330\155\230\373\153\132\155\324\325\344\027\006\210\022\061\321\257\137\000\134\053\220\026\346\055\041\255\222\316\013\336\245\372\311\206\064\316\347\301\236\020\274\122\277\342\313\236\106\205\143\377\364\017\333\143\142\341\013\175\014\367\344\130\267"
+            }
+          }
+        }
+      }
+    }
+  }
+  container_layer {
+    binary {
+      skip { }
+    }
+    configuration {
+      skip { }
+    }
+  }
+}
