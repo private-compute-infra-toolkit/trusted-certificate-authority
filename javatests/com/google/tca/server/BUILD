@@ -88,7 +88,7 @@ java_library(
 
 java_test(
     name = "CertificateIssuanceIntegrationTest",
-    size = "small",
+    size = "medium",
     srcs = [
         "CertificateIssuanceIntegrationTest.java",
     ],
@@ -118,6 +118,7 @@ java_test(
         "@maven//:com_google_inject_guice",
         "@maven//:com_google_truth_truth",
         "@maven//:io_jsonwebtoken_jjwt_api",
+        "@maven//:io_micrometer_micrometer_registry_prometheus",
         "@maven//:junit_junit",
         "@maven//:org_bouncycastle_bcpkix_jdk18on",
         "@maven//:org_bouncycastle_bcprov_jdk18on",
@@ -148,6 +149,7 @@ java_test(
         "//java/com/google/tca/adapters/oidc",
         "//java/com/google/tca/domain",
         "//java/com/google/tca/domain/attestation",
+        "//java/com/google/tca/domain/metric",
         "//java/com/google/tca/domain/policy",
         "//java/com/google/tca/proto:trusted_certificate_authority_java_grpc",
         "//java/com/google/tca/proto:trusted_certificate_authority_java_proto",
@@ -163,7 +165,9 @@ java_test(
         "@maven//:com_google_inject_extensions_guice_testlib",
         "@maven//:com_google_inject_guice",
         "@maven//:com_google_truth_truth",
+        "@maven//:com_linecorp_armeria_armeria",
         "@maven//:io_jsonwebtoken_jjwt_api",
+        "@maven//:io_micrometer_micrometer_registry_prometheus",
         "@maven//:junit_junit",
         "@maven//:org_bouncycastle_bcpkix_jdk18on",
         "@maven//:org_bouncycastle_bcprov_jdk18on",
@@ -178,6 +182,28 @@ java_test(
         "@oak//proto/attestation:evidence_java_proto",
         "@pcit_mbs//java/com/google/mbs:certmanagement",
         "@pcit_mbs//java/com/google/mbs/attestationcollection",
+    ],
+)
+
+java_test(
+    name = "KmsModeModuleTest",
+    size = "small",
+    srcs = [
+        "KmsModeModuleTest.java",
+    ],
+    deps = [
+        "//java/com/google/tca/server",
+        "//java/com/google/tca/server:cmd_line_args",
+        "@maven//:com_google_guava_guava",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
+        "@maven//:org_bouncycastle_bcprov_jdk18on",
+        "@maven//:org_mockito_mockito_core",
+        "@maven//:software_amazon_awssdk_s3",
+        "@pcit_mbs//java/com/google/kmsclient",
+        "@pcit_mbs//java/com/google/mbs:certmanagement",
+        "@pcit_mbs//java/com/google/mbs/attestationcollection",
+        "@pcit_mbs//java/com/google/tlog",
     ],
 )
 
@@ -218,36 +244,6 @@ java_test(
         "@maven//:org_mockito_mockito_core",
         "@oak//proto/attestation:endorsement_java_proto",
         "@oak//proto/attestation:evidence_java_proto",
-        "@pcit_mbs//java/com/google/mbs:certmanagement",
-    ],
-)
-
-java_test(
-    name = "ReproduceIssueTest",
-    size = "small",
-    srcs = ["ReproduceIssueTest.java"],
-    runtime_deps = [
-        "@maven//:com_google_flogger_flogger_system_backend",
-        "@maven//:org_slf4j_slf4j_jdk14",
-    ],
-    deps = [
-        "//java/com/google/tca/adapters",
-        "//java/com/google/tca/domain",
-        "//java/com/google/tca/server",
-        "//java/com/google/tca/server:cmd_line_args",
-        "//java/com/google/tca/server:server_main",
-        "@io_grpc_grpc_java//api",
-        "@maven//:com_google_flogger_flogger",
-        "@maven//:com_google_guava_guava",
-        "@maven//:com_google_inject_guice",
-        "@maven//:com_google_truth_truth",
-        "@maven//:com_linecorp_armeria_armeria",
-        "@maven//:com_linecorp_armeria_armeria_grpc",
-        "@maven//:io_grpc_grpc_services",
-        "@maven//:io_jsonwebtoken_jjwt_api",
-        "@maven//:junit_junit",
-        "@maven//:org_mockito_mockito_core",
-        "@maven//:software_amazon_awssdk_s3",
         "@pcit_mbs//java/com/google/mbs:certmanagement",
     ],
 )

@@ -41,12 +41,14 @@ import com.google.tca.domain.policy.ReferenceValues;
 import com.google.tca.v1.IssueCertificateRequest;
 import com.google.tca.v1.IssueCertificateResponse;
 import com.google.tca.v1.TrustedCertificateAuthorityGrpc;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
-import io.grpc.ServerInterceptors;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.testing.GrpcCleanupRule;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -70,6 +72,7 @@ import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -80,6 +83,7 @@ import org.mockito.MockitoAnnotations;
 
 @RunWith(JUnit4.class)
 public class CertificateIssuanceIntegrationTest {
+  private static final int ANY_PORT = 0;
 
   @Rule public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
@@ -89,6 +93,8 @@ public class CertificateIssuanceIntegrationTest {
 
   private FileFetcherStub fileFetcherStub;
   private Injector injector;
+  private TcaServer tcaServer;
+  private ManagedChannel channel;
   private TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub blockingStub;
 
   // Helper class to return both CSR and KeyPair from the helper method.
@@ -118,7 +124,10 @@ public class CertificateIssuanceIntegrationTest {
                 new MbsCertificateFactory.CertSignatureSpec("RSA", 4096, "SHA256withRSA"),
                 new X500Name("CN=TCA"),
                 Duration.ofDays(30),
-                Optional.empty(),
+                Optional.of(
+                    new GeneralNames(
+                        new GeneralName(
+                            GeneralName.uniformResourceIdentifier, "spiffe://tca.local.test"))),
                 KeyUsage.keyCertSign)
             .generate();
 
@@ -135,7 +144,7 @@ public class CertificateIssuanceIntegrationTest {
         new FileFetcherStub(
             ByteString.copyFromUtf8(
                 readTestFile("javatests/com/google/tca/server/testdata/policy.textproto")
-                    .replace("{publisher_id_to_replace}", "default_publisher_id")
+                    .replace("{publisher_id_to_replace}", "default_publisher_id@example.com")
                     .replace("{workload_id_to_replace}", "default_workload_id")
                     .replace(
                         "{oak_containers_reference_values}",
@@ -169,21 +178,16 @@ public class CertificateIssuanceIntegrationTest {
     TrustedCertificateAuthorityGrpcHandler service =
         injector.getInstance(TrustedCertificateAuthorityGrpcHandler.class);
     JwtInterceptor jwtInterceptor = injector.getInstance(JwtInterceptor.class);
+    PrometheusMeterRegistry meterRegistry = injector.getInstance(PrometheusMeterRegistry.class);
 
-    String serverName = "test-server";
-    grpcCleanup.register(
-        io.grpc.inprocess.InProcessServerBuilder.forName(serverName)
-            .directExecutor()
-            .addService(ServerInterceptors.intercept(service, jwtInterceptor))
-            .build()
-            .start());
+    tcaServer = new TcaServer(ANY_PORT, service, jwtInterceptor, meterRegistry);
+    tcaServer.start().join();
 
-    blockingStub =
-        TrustedCertificateAuthorityGrpc.newBlockingStub(
-            grpcCleanup.register(
-                io.grpc.inprocess.InProcessChannelBuilder.forName(serverName)
-                    .directExecutor()
-                    .build()));
+    channel =
+        grpcCleanup.register(
+            ManagedChannelBuilder.forAddress("localhost", tcaServer.port()).usePlaintext().build());
+
+    blockingStub = TrustedCertificateAuthorityGrpc.newBlockingStub(channel);
 
     Metadata metadata = new Metadata();
     metadata.put(
@@ -192,6 +196,13 @@ public class CertificateIssuanceIntegrationTest {
 
     blockingStub =
         blockingStub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
+  }
+
+  @After
+  public void tearDown() {
+    if (tcaServer != null) {
+      tcaServer.stop().join();
+    }
   }
 
   private com.google.tca.v1.AttestationEvidence createGcpEvidence(String token) {
@@ -220,13 +231,8 @@ public class CertificateIssuanceIntegrationTest {
 
   @Test
   public void issueCertificate_missingToken_fails() {
-    // Create a stub without the Authorization header interceptor
     TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub nakedStub =
-        TrustedCertificateAuthorityGrpc.newBlockingStub(
-            grpcCleanup.register(
-                io.grpc.inprocess.InProcessChannelBuilder.forName("test-server")
-                    .directExecutor()
-                    .build()));
+        TrustedCertificateAuthorityGrpc.newBlockingStub(channel);
 
     IssueCertificateRequest request =
         IssueCertificateRequest.newBuilder()
@@ -246,11 +252,7 @@ public class CertificateIssuanceIntegrationTest {
         Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER), "Bearer invalid-token");
 
     TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub badTokenStub =
-        TrustedCertificateAuthorityGrpc.newBlockingStub(
-                grpcCleanup.register(
-                    io.grpc.inprocess.InProcessChannelBuilder.forName("test-server")
-                        .directExecutor()
-                        .build()))
+        TrustedCertificateAuthorityGrpc.newBlockingStub(channel)
             .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
 
     IssueCertificateRequest request =
@@ -341,7 +343,7 @@ public class CertificateIssuanceIntegrationTest {
 
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
 
-    assertEquals(1, response.getSignedCertificatesCount());
+    assertEquals(2, response.getSignedCertificatesCount());
 
     X509Certificate signedCert =
         (X509Certificate)
@@ -349,6 +351,12 @@ public class CertificateIssuanceIntegrationTest {
                 new ByteArrayInputStream(response.getSignedCertificates(0).toByteArray()));
 
     X509Certificate rootCert = injector.getInstance(X509Certificate.class);
+
+    X509Certificate responseRootCert =
+        (X509Certificate)
+            cf.generateCertificate(
+                new ByteArrayInputStream(response.getSignedCertificates(1).toByteArray()));
+    assertEquals(rootCert, responseRootCert);
 
     signedCert.verify(rootCert.getPublicKey());
     assertEquals("CN=test", signedCert.getSubjectX500Principal().getName());
@@ -359,7 +367,7 @@ public class CertificateIssuanceIntegrationTest {
 
     // Verify the SAN extension
     String expectedSpiffeId =
-        "spiffe://example.org/operator/test_operator/publisher/default_publisher_id/workload/default_workload_id";
+        "spiffe://example.org/operator/test_operator/publisher/example.com/default_publisher_id/workload/default_workload_id";
     GeneralNames names =
         GeneralNames.getInstance(
             ASN1OctetString.getInstance(
@@ -387,7 +395,7 @@ public class CertificateIssuanceIntegrationTest {
     fileFetcherStub.setContent(
         ByteString.copyFromUtf8(
             readTestFile("javatests/com/google/tca/server/testdata/policy.textproto")
-                .replace("{publisher_id_to_replace}", "default_publisher_id")
+                .replace("{publisher_id_to_replace}", "default_publisher_id@example.com")
                 .replace("{workload_id_to_replace}", "default_workload_id")
                 .replace(
                     "ca_certificate {\n            path_len_constraint: 1\n          }",
@@ -414,7 +422,7 @@ public class CertificateIssuanceIntegrationTest {
 
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
 
-    assertEquals(1, response.getSignedCertificatesCount());
+    assertEquals(2, response.getSignedCertificatesCount());
 
     X509Certificate signedCert =
         (X509Certificate)
@@ -422,6 +430,12 @@ public class CertificateIssuanceIntegrationTest {
                 new ByteArrayInputStream(response.getSignedCertificates(0).toByteArray()));
 
     X509Certificate rootCert = injector.getInstance(X509Certificate.class);
+
+    X509Certificate responseRootCert =
+        (X509Certificate)
+            cf.generateCertificate(
+                new ByteArrayInputStream(response.getSignedCertificates(1).toByteArray()));
+    assertEquals(rootCert, responseRootCert);
 
     signedCert.verify(rootCert.getPublicKey());
     assertEquals("CN=test", signedCert.getSubjectX500Principal().getName());
@@ -432,7 +446,7 @@ public class CertificateIssuanceIntegrationTest {
 
     // Verify the SAN extension
     String expectedSpiffeId =
-        "spiffe://example.org/operator/test_operator/publisher/default_publisher_id/workload/default_workload_id";
+        "spiffe://example.org/operator/test_operator/publisher/example.com/default_publisher_id/workload/default_workload_id";
     GeneralNames names =
         GeneralNames.getInstance(
             ASN1OctetString.getInstance(
@@ -485,7 +499,7 @@ public class CertificateIssuanceIntegrationTest {
 
     IssueCertificateResponse response = blockingStub.issueCertificate(request);
 
-    assertEquals(1, response.getSignedCertificatesCount());
+    assertEquals(2, response.getSignedCertificatesCount());
   }
 
   @Test

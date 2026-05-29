@@ -33,6 +33,7 @@ import com.google.tca.adapters.GcpAttestationEvidence;
 import com.google.tca.adapters.KeyDecoderImpl;
 import com.google.tca.adapters.OakAttestationEvidence;
 import com.google.tca.adapters.S3FileFetcher;
+import com.google.tca.adapters.SystemMetrics;
 import com.google.tca.adapters.certsigning.CertificateModifiersCreatorImpl;
 import com.google.tca.adapters.endorsement.JsonIntotoEndorsementMetadataProvider;
 import com.google.tca.adapters.oidc.AudienceHostname;
@@ -40,6 +41,7 @@ import com.google.tca.adapters.oidc.OidcAudienceBindingValidator;
 import com.google.tca.adapters.oidc.OidcDiscoveryFetcher;
 import com.google.tca.adapters.oidc.OidcJwksKeyFetcher;
 import com.google.tca.adapters.oidc.OidcJwksKeyLocator;
+import com.google.tca.adapters.oidc.TrustDomain;
 import com.google.tca.attestation.aws.AwsAttestationVerifier;
 import com.google.tca.attestation.gcp.GcpAttestation;
 import com.google.tca.attestation.gcp.GcpAttestationVerifier;
@@ -53,12 +55,17 @@ import com.google.tca.domain.FileFetcher;
 import com.google.tca.domain.KeyDecoder;
 import com.google.tca.domain.PolicyProvider;
 import com.google.tca.domain.TimeProvider;
+import com.google.tca.domain.TrustDomainExtractor;
 import com.google.tca.domain.attestation.AttestationEvidence;
 import com.google.tca.domain.attestation.AttestationVerifier;
 import com.google.tca.domain.attestation.AttestationVerifierProvider;
+import com.google.tca.domain.metric.Metrics;
 import com.google.tlog.TlogEntry;
 import com.google.tlog.TransparencyLogClient;
 import io.jsonwebtoken.Locator;
+import io.micrometer.core.instrument.config.MeterFilter;
+import io.micrometer.prometheusmetrics.PrometheusConfig;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import jakarta.inject.Singleton;
 import java.net.http.HttpClient;
 import java.security.Key;
@@ -90,6 +97,7 @@ public class TrustedCaModule extends AbstractModule {
     bind(EndorsementMetadataProvider.class).to(JsonIntotoEndorsementMetadataProvider.class);
     bind(CertificateModifiersCreator.class).to(CertificateModifiersCreatorImpl.class);
     bind(FileFetcher.class).to(S3FileFetcher.class);
+    bind(Metrics.class).to(SystemMetrics.class);
     bind(AudienceBindingValidator.class).to(OidcAudienceBindingValidator.class);
     bind(String.class).annotatedWith(AudienceHostname.class).toInstance("tca.pcit.goog");
   }
@@ -175,5 +183,25 @@ public class TrustedCaModule extends AbstractModule {
   @Singleton
   public ObjectMapper provideObjectMapper() {
     return new ObjectMapper().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+  }
+
+  @Provides
+  @Singleton
+  public PrometheusMeterRegistry providePrometheusMeterRegistry() {
+    PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+    registry
+        .config()
+        .meterFilter(MeterFilter.acceptNameStartsWith("tca."))
+        .meterFilter(MeterFilter.acceptNameStartsWith("armeria.server.connections"))
+        .meterFilter(MeterFilter.deny());
+    return registry;
+  }
+
+  @Provides
+  @Singleton
+  @TrustDomain
+  String provideTrustDomain(X509Certificate rootCertificate)
+      throws java.security.cert.CertificateParsingException, java.net.URISyntaxException {
+    return TrustDomainExtractor.extract(rootCertificate);
   }
 }

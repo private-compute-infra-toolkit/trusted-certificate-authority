@@ -36,6 +36,7 @@ java_library(
         "KeyDecoder.java",
         "PolicyProvider.java",
         "TimeProvider.java",
+        "TrustDomainExtractor.java",
         "TrustedCaService.java",
     ],
     plugins = [":auto_value_plugin"],
@@ -44,6 +45,7 @@ java_library(
     ],
     deps = [
         "//java/com/google/tca/domain/attestation",
+        "//java/com/google/tca/domain/metric",
         "//java/com/google/tca/domain/policy",
         "@maven//:com_google_auto_value_auto_value_annotations",
         "@maven//:com_google_flogger_flogger",

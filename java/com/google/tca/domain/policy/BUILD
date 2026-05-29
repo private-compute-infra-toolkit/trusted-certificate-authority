@@ -28,6 +28,7 @@ java_library(
         "Policy.java",
         "ReferenceValues.java",
         "ReferenceValuesType.java",
+        "X500NameAttributes.java",
         "X509CertificateAttributes.java",
         "X509Extensions.java",
     ],

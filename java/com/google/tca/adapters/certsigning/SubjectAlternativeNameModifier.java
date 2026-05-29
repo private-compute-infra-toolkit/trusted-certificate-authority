@@ -37,16 +37,30 @@ public class SubjectAlternativeNameModifier implements CertificateModifier {
     String san =
         String.format(
             "spiffe://%s/operator/%s/publisher/%s/workload/%s",
-            policy.trustDomain(), policy.operator(), policy.publisherId(), policy.workloadId());
+            policy.trustDomain(),
+            policy.operator(),
+            toSpiffeIdPublisher(policy.publisherId()),
+            policy.workloadId());
 
     try {
       builder.addExtension(
           Extension.subjectAlternativeName,
-          false,
+          true,
           new GeneralNames(new GeneralName(GeneralName.uniformResourceIdentifier, san)));
     } catch (CertIOException e) {
       throw new RuntimeException(
           "Error occurred during application of SAN certificate extension", e);
     }
+  }
+
+  static String toSpiffeIdPublisher(String publisherId) {
+    int atIndex = publisherId.indexOf('@');
+    if (atIndex == -1) {
+      throw new IllegalArgumentException(
+          "Publisher ID must be in email-like format (role@domain): " + publisherId);
+    }
+    String role = publisherId.substring(0, atIndex);
+    String domain = publisherId.substring(atIndex + 1);
+    return domain + "/" + role;
   }
 }

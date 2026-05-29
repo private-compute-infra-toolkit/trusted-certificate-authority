@@ -66,7 +66,7 @@ public final class JsonIntotoEndorsementMetadataProvider implements EndorsementM
       return extractAnnotations(statementBytes);
     } catch (Exception e) {
       logger.atWarning().log("Failed to extract annotations from endorsement, returning defaults");
-      return new EndorsementAnnotations("default_publisher_id", "default_workload_id");
+      return new EndorsementAnnotations("default_publisher_id@example.com", "default_workload_id");
     }
   }
 

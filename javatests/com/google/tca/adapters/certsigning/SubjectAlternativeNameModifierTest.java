@@ -27,6 +27,7 @@ import com.google.protobuf.ByteString;
 import com.google.tca.domain.policy.Policy;
 import com.google.tca.domain.policy.ReferenceValues;
 import com.google.tca.domain.policy.ReferenceValuesType;
+import com.google.tca.domain.policy.X500NameAttributes;
 import com.google.tca.domain.policy.X509CertificateAttributes;
 import com.google.tca.domain.policy.X509Extensions;
 import java.math.BigInteger;
@@ -35,6 +36,7 @@ import java.security.KeyPairGenerator;
 import java.time.Duration;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.bouncycastle.asn1.ASN1Encodable;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
@@ -81,13 +83,15 @@ public class SubjectAlternativeNameModifierTest {
   public void apply_addsSubjectAlternativeNameExtension() throws Exception {
     Policy policy =
         new Policy(
-            "test-publisher",
+            "test-publisher@example.com",
             "test-app",
             "example.org",
             "test-operator",
             List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)),
             new X509CertificateAttributes(
-                Duration.ofHours(1), new X509Extensions(Optional.empty(), Optional.empty())));
+                Duration.ofHours(1),
+                new X509Extensions(Optional.empty(), Optional.empty()),
+                new X500NameAttributes(Map.of("2.5.4.3", "test-subject"))));
 
     SubjectAlternativeNameModifier modifier = new SubjectAlternativeNameModifier(policy);
 
@@ -103,20 +107,22 @@ public class SubjectAlternativeNameModifierTest {
     assertThat(namesArray[0].getTagNo()).isEqualTo(GeneralName.uniformResourceIdentifier);
     assertThat(namesArray[0].getName().toString())
         .isEqualTo(
-            "spiffe://example.org/operator/test-operator/publisher/test-publisher/workload/test-app");
+            "spiffe://example.org/operator/test-operator/publisher/example.com/test-publisher/workload/test-app");
   }
 
   @Test
   public void apply_throwsRuntimeExceptionOnCertIOException() throws Exception {
     Policy policy =
         new Policy(
-            "test-publisher",
+            "test-publisher@example.com",
             "test-app",
             "example.org",
             "test-operator",
             List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)),
             new X509CertificateAttributes(
-                Duration.ofHours(1), new X509Extensions(Optional.empty(), Optional.empty())));
+                Duration.ofHours(1),
+                new X509Extensions(Optional.empty(), Optional.empty()),
+                new X500NameAttributes(Map.of("2.5.4.3", "test-subject"))));
 
     SubjectAlternativeNameModifier modifier = new SubjectAlternativeNameModifier(policy);
 
@@ -131,5 +137,16 @@ public class SubjectAlternativeNameModifierTest {
         .hasMessageThat()
         .isEqualTo("Error occurred during application of SAN certificate extension");
     assertThat(thrown).hasCauseThat().isInstanceOf(CertIOException.class);
+  }
+
+  @Test
+  public void toSpiffeIdPublisher_missingAt_throwsException() {
+    IllegalArgumentException thrown =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> SubjectAlternativeNameModifier.toSpiffeIdPublisher("invalid-publisher"));
+    assertThat(thrown)
+        .hasMessageThat()
+        .isEqualTo("Publisher ID must be in email-like format (role@domain): invalid-publisher");
   }
 }

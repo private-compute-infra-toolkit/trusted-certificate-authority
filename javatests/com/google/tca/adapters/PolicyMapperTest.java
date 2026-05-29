@@ -59,7 +59,9 @@ public class PolicyMapperTest {
       assertThat(domainPolicies.policiesMap()).containsKey("test-policy");
 
       Policy firstPolicy = domainPolicies.policiesMap().get("test-policy");
-      assertThat(firstPolicy.publisherId()).isEqualTo("publisher-1");
+      assertThat(firstPolicy.publisherId()).isEqualTo("publisher-1@testpublisher.com");
+      assertThat(firstPolicy.certificateAttributes().certificateSubject().attributes())
+          .containsExactly("2.5.4.3", "test");
       assertThat(firstPolicy.referenceValuesList()).hasSize(2);
       assertThat(firstPolicy.referenceValuesList().get(0).type())
           .isEqualTo(ReferenceValuesType.OAK);
@@ -119,6 +121,10 @@ public class PolicyMapperTest {
                           com.google.protobuf.Duration.newBuilder().setSeconds(3600).build())
                       .setX509Extensions(
                           com.google.tca.policy.v1.X509Extensions.newBuilder().build())
+                      .setCertificateSubject(
+                          com.google.tca.policy.v1.X500NameAttributes.newBuilder()
+                              .putAttributes("2.5.4.3", "manual-subject")
+                              .build())
                       .build())
               .build();
 
@@ -136,6 +142,8 @@ public class PolicyMapperTest {
       assertThat(domainPolicy.publisherId()).isEqualTo("pub1");
       assertThat(domainPolicy.workloadId()).isEqualTo("work1");
       assertThat(domainPolicy.trustDomain()).isEqualTo("trust.domain.com");
+      assertThat(domainPolicy.certificateAttributes().certificateSubject().attributes())
+          .containsExactly("2.5.4.3", "manual-subject");
 
       assertThat(domainPolicy.referenceValuesList()).hasSize(1);
       assertThat(domainPolicy.referenceValuesList().get(0).type())
@@ -178,6 +186,10 @@ public class PolicyMapperTest {
                                   com.google.tca.policy.v1.NameConstraints.newBuilder()
                                       .addPermittedSubtree("some.subdomain.example.com")
                                       .build())
+                              .build())
+                      .setCertificateSubject(
+                          com.google.tca.policy.v1.X500NameAttributes.newBuilder()
+                              .putAttributes("2.5.4.3", "full-extensions-subject")
                               .build())
                       .build())
               .build();
@@ -224,6 +236,10 @@ public class PolicyMapperTest {
                                           com.google.tca.policy.v1.LeafCertificate.newBuilder()
                                               .build()))
                               .build())
+                      .setCertificateSubject(
+                          com.google.tca.policy.v1.X500NameAttributes.newBuilder()
+                              .putAttributes("2.5.4.3", "some-extensions-subject")
+                              .build())
                       .build())
               .build();
 
@@ -257,6 +273,10 @@ public class PolicyMapperTest {
                           com.google.protobuf.Duration.newBuilder().setSeconds(3600).build())
                       .setX509Extensions(
                           com.google.tca.policy.v1.X509Extensions.newBuilder().build())
+                      .setCertificateSubject(
+                          com.google.tca.policy.v1.X500NameAttributes.newBuilder()
+                              .putAttributes("2.5.4.3", "valid-subject")
+                              .build())
                       .build())
               .build();
 

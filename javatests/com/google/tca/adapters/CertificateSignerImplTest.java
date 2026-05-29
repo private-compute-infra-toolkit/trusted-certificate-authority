@@ -19,18 +19,31 @@ package com.google.tca.adapters;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.when;
 
+import com.google.protobuf.ByteString;
 import com.google.tca.adapters.certsigning.BasicConstraintsModifier;
+import com.google.tca.adapters.certsigning.KeyUsageModifier;
 import com.google.tca.adapters.certsigning.NameConstraintsModifier;
+import com.google.tca.adapters.certsigning.SubjectAlternativeNameModifier;
 import com.google.tca.domain.TimeProvider;
 import com.google.tca.domain.policy.BasicConstraints;
 import com.google.tca.domain.policy.BasicConstraintsType;
+import com.google.tca.domain.policy.Policy;
+import com.google.tca.domain.policy.ReferenceValues;
+import com.google.tca.domain.policy.ReferenceValuesType;
+import com.google.tca.domain.policy.X500NameAttributes;
+import com.google.tca.domain.policy.X509CertificateAttributes;
+import com.google.tca.domain.policy.X509Extensions;
 import java.math.BigInteger;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import javax.security.auth.x500.X500Principal;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
@@ -81,40 +94,7 @@ public class CertificateSignerImplTest {
   }
 
   @Test
-  public void signCsr_leafCertificate_succeedsWithCorrectExtensions() throws Exception {
-    KeyPair clientKeyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-
-    JcaPKCS10CertificationRequestBuilder p10Builder =
-        new JcaPKCS10CertificationRequestBuilder(
-            new X500Name("CN=TestWorkload"), clientKeyPair.getPublic());
-    ContentSigner clientSigner =
-        new JcaContentSignerBuilder("SHA256withRSA").build(clientKeyPair.getPrivate());
-    PKCS10CertificationRequest csr = p10Builder.build(clientSigner);
-
-    X509Certificate signedCert =
-        certificateSigner.signCsr(
-            csr.getEncoded(),
-            issuerCert,
-            issuerKeyPair.getPrivate(),
-            testTime,
-            testTime.plus(Duration.ofHours(1)),
-            List.of(),
-            /* isCa= */ false);
-
-    assertThat(signedCert).isNotNull();
-    signedCert.verify(issuerKeyPair.getPublic());
-    assertThat(signedCert.getSubjectX500Principal().getName()).isEqualTo("CN=TestWorkload");
-
-    boolean[] keyUsage = signedCert.getKeyUsage();
-    assertThat(keyUsage).isNotNull();
-    assertThat(keyUsage[0]).isTrue(); // digitalSignature
-    assertThat(keyUsage[2]).isTrue(); // keyEncipherment
-    assertThat(keyUsage[5]).isFalse(); // keyCertSign (not a CA)
-    assertThat(signedCert.getBasicConstraints()).isEqualTo(-1);
-  }
-
-  @Test
-  public void signCsr_caCertificate_succeedsWithCorrectExtensions() throws Exception {
+  public void signCsr_withoutModifiers_succeeds() throws Exception {
     KeyPair clientKeyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
 
     JcaPKCS10CertificationRequestBuilder p10Builder =
@@ -132,17 +112,12 @@ public class CertificateSignerImplTest {
             testTime,
             testTime.plus(Duration.ofHours(1)),
             List.of(),
-            /* isCa= */ true);
+            new X500Principal("O=Org,C=US,CN=TestWorkload"));
 
     assertThat(signedCert).isNotNull();
     signedCert.verify(issuerKeyPair.getPublic());
-    assertThat(signedCert.getSubjectX500Principal().getName()).isEqualTo("CN=TestCA");
-
-    boolean[] keyUsage = signedCert.getKeyUsage();
-    assertThat(keyUsage).isNotNull();
-    assertThat(keyUsage[0]).isFalse(); // digitalSignature
-    assertThat(keyUsage[2]).isFalse(); // keyEncipherment
-    assertThat(keyUsage[5]).isTrue(); // keyCertSign (is a CA)
+    assertThat(signedCert.getSubjectX500Principal().getName())
+        .isEqualTo("O=Org,C=US,CN=TestWorkload");
   }
 
   @Test
@@ -162,6 +137,9 @@ public class CertificateSignerImplTest {
     List<String> permittedSubtrees = List.of("permitted.example.com");
     NameConstraintsModifier ncModifier = new NameConstraintsModifier(permittedSubtrees);
 
+    KeyUsageModifier kuModifier = new KeyUsageModifier(bcConfig);
+    SubjectAlternativeNameModifier sanModifier = getSubjectAlternativeNameModifier();
+
     X509Certificate signedCert =
         certificateSigner.signCsr(
             csr.getEncoded(),
@@ -169,8 +147,8 @@ public class CertificateSignerImplTest {
             issuerKeyPair.getPrivate(),
             testTime,
             testTime.plus(Duration.ofHours(1)),
-            List.of(bcModifier, ncModifier),
-            /* isCa= */ true);
+            List.of(bcModifier, ncModifier, kuModifier, sanModifier),
+            new X500Principal("CN=TestCA"));
 
     assertThat(signedCert).isNotNull();
     signedCert.verify(issuerKeyPair.getPublic());
@@ -198,5 +176,29 @@ public class CertificateSignerImplTest {
     assertThat(subtree.getBase().getTagNo())
         .isEqualTo(org.bouncycastle.asn1.x509.GeneralName.uniformResourceIdentifier);
     assertThat(subtree.getBase().getName().toString()).isEqualTo("permitted.example.com");
+
+    Collection<List<?>> sans = signedCert.getSubjectAlternativeNames();
+    assertThat(sans).isNotNull();
+    assertThat(sans).hasSize(1);
+    List<?> san = sans.iterator().next();
+    assertThat(san.get(0)).isEqualTo(6); // uniformResourceIdentifier
+    assertThat(san.get(1))
+        .isEqualTo(
+            "spiffe://example.org/operator/test-operator/publisher/example.com/test-publisher/workload/test-app");
+  }
+
+  private SubjectAlternativeNameModifier getSubjectAlternativeNameModifier() {
+    Policy policy =
+        new Policy(
+            "test-publisher@example.com",
+            "test-app",
+            "example.org",
+            "test-operator",
+            List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)),
+            new X509CertificateAttributes(
+                Duration.ofHours(1),
+                new X509Extensions(Optional.empty(), Optional.empty()),
+                new X500NameAttributes(Map.of())));
+    return new SubjectAlternativeNameModifier(policy);
   }
 }

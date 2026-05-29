@@ -31,10 +31,9 @@ import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
-import org.bouncycastle.asn1.x500.X500Name;
+import javax.security.auth.x500.X500Principal;
 import org.bouncycastle.asn1.x509.AuthorityKeyIdentifier;
 import org.bouncycastle.asn1.x509.Extension;
-import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
 import org.bouncycastle.cert.X509v3CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
@@ -69,7 +68,7 @@ public class CertificateSignerImpl implements CertificateSigner {
       Instant notBefore,
       Instant notAfter,
       List<CertificateModifier> modifiers,
-      boolean isCa)
+      X500Principal subject)
       throws CertificateException, IOException {
     try {
       PKCS10CertificationRequest csr = new PKCS10CertificationRequest(csrBytes);
@@ -78,11 +77,11 @@ public class CertificateSignerImpl implements CertificateSigner {
 
       X509v3CertificateBuilder certBuilder =
           new JcaX509v3CertificateBuilder(
-              new X500Name(issuerCert.getSubjectX500Principal().getName()),
+              issuerCert.getSubjectX500Principal(),
               serial,
               Date.from(notBefore),
               Date.from(notAfter),
-              csr.getSubject(),
+              subject,
               new JcaPEMKeyConverter().getPublicKey(csr.getSubjectPublicKeyInfo()));
 
       JcaX509ExtensionUtils extUtils = new JcaX509ExtensionUtils();
@@ -91,14 +90,6 @@ public class CertificateSignerImpl implements CertificateSigner {
 
       certBuilder.addExtension(Extension.authorityKeyIdentifier, false, aki);
       certBuilder.addExtension(Extension.subjectKeyIdentifier, false, ski);
-      if (isCa) {
-        certBuilder.addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.keyCertSign));
-      } else {
-        certBuilder.addExtension(
-            Extension.keyUsage,
-            true,
-            new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyEncipherment));
-      }
 
       modifiers.forEach(modifier -> modifier.apply(certBuilder));
 

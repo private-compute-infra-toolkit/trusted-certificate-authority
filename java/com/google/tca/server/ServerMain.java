@@ -21,6 +21,7 @@ import com.beust.jcommander.ParameterException;
 import com.google.common.flogger.FluentLogger;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 
 /** An Armeria server that hosts the TrustedCaService with gRPC and REST support. */
 public class ServerMain {
@@ -67,9 +68,10 @@ public class ServerMain {
     TrustedCertificateAuthorityGrpcHandler service =
         injector.getInstance(TrustedCertificateAuthorityGrpcHandler.class);
     JwtInterceptor jwtInterceptor = injector.getInstance(JwtInterceptor.class);
+    PrometheusMeterRegistry meterRegistry = injector.getInstance(PrometheusMeterRegistry.class);
 
     int port = 50051;
-    TcaServer tcaServer = new TcaServer(port, service, jwtInterceptor);
+    TcaServer tcaServer = new TcaServer(port, service, jwtInterceptor, meterRegistry);
 
     tcaServer.start().join();
 

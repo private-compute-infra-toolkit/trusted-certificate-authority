@@ -22,6 +22,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.util.List;
+import javax.security.auth.x500.X500Principal;
 
 public interface CertificateSigner {
 
@@ -32,6 +33,6 @@ public interface CertificateSigner {
       Instant notBefore,
       Instant notAfter,
       List<CertificateModifier> modifiers,
-      boolean isCa)
+      X500Principal subject)
       throws CertificateException, IOException;
 }

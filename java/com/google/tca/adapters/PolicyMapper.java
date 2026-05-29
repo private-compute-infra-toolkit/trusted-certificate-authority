@@ -28,6 +28,7 @@ import com.google.tca.domain.policy.Policies;
 import com.google.tca.domain.policy.Policy;
 import com.google.tca.domain.policy.ReferenceValues;
 import com.google.tca.domain.policy.ReferenceValuesType;
+import com.google.tca.domain.policy.X500NameAttributes;
 import com.google.tca.domain.policy.X509CertificateAttributes;
 import com.google.tca.domain.policy.X509Extensions;
 import java.time.Duration;
@@ -83,7 +84,12 @@ public class PolicyMapper {
         Duration.ofSeconds(
             proto.getMaxCertificateValidity().getSeconds(),
             proto.getMaxCertificateValidity().getNanos()),
-        toDomain(proto.getX509Extensions()));
+        toDomain(proto.getX509Extensions()),
+        toDomain(proto.getCertificateSubject()));
+  }
+
+  private static X500NameAttributes toDomain(com.google.tca.policy.v1.X500NameAttributes proto) {
+    return new X500NameAttributes(proto.getAttributesMap());
   }
 
   private static X509Extensions toDomain(com.google.tca.policy.v1.X509Extensions proto) {

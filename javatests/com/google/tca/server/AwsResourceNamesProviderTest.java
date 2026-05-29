@@ -43,7 +43,8 @@ public class AwsResourceNamesProviderTest {
     when(mockKmsArgs.getConfigBucketPrefix()).thenReturn("test-config-prefix");
     when(mockKmsArgs.getKmsKeySuffix()).thenReturn("alias/test-key-suffix");
 
-    AwsInstanceMetadata awsInstanceMetadata = new AwsInstanceMetadata("us-east-1", "123456789012");
+    AwsInstanceMetadata awsInstanceMetadata =
+        new AwsInstanceMetadata("us-east-1", "123456789012", "dev", "pcit.goog");
     provider = new AwsResourceNamesProvider(mockKmsArgs, awsInstanceMetadata);
   }
 

@@ -18,6 +18,7 @@ package com.google.tca.adapters.certsigning;
 
 import com.google.tca.domain.CertificateModifier;
 import com.google.tca.domain.CertificateModifiersCreator;
+import com.google.tca.domain.policy.BasicConstraints;
 import com.google.tca.domain.policy.NameConstraints;
 import com.google.tca.domain.policy.Policy;
 import jakarta.inject.Singleton;
@@ -38,9 +39,10 @@ public class CertificateModifiersCreatorImpl implements CertificateModifiersCrea
     }
 
     if (policy.certificateAttributes().extensions().basicConstraints().isPresent()) {
-      modifiers.add(
-          new BasicConstraintsModifier(
-              policy.certificateAttributes().extensions().basicConstraints().get()));
+      BasicConstraints basicConstraints =
+          policy.certificateAttributes().extensions().basicConstraints().get();
+      modifiers.add(new BasicConstraintsModifier(basicConstraints));
+      modifiers.add(new KeyUsageModifier(basicConstraints));
     }
 
     modifiers.add(new SubjectAlternativeNameModifier(policy));

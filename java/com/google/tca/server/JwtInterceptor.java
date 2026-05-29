@@ -16,7 +16,11 @@
 
 package com.google.tca.server;
 
+import static com.google.tca.domain.metric.Status.FAILURE;
+import static com.google.tca.domain.metric.Status.SUCCESS;
+
 import com.google.common.flogger.FluentLogger;
+import com.google.tca.domain.metric.Metrics;
 import io.grpc.Context;
 import io.grpc.Contexts;
 import io.grpc.Metadata;
@@ -47,10 +51,12 @@ public final class JwtInterceptor implements ServerInterceptor {
   public static final Context.Key<Set<String>> AUDIENCE_CONTEXT_KEY = Context.key("audience");
 
   private final Locator<Key> keyLocator;
+  private final Metrics metrics;
 
   @Inject
-  public JwtInterceptor(@JwtAuth Locator<Key> keyLocator) {
+  public JwtInterceptor(@JwtAuth Locator<Key> keyLocator, Metrics metrics) {
     this.keyLocator = keyLocator;
+    this.metrics = metrics;
   }
 
   @Override
@@ -63,6 +69,7 @@ public final class JwtInterceptor implements ServerInterceptor {
       call.close(
           Status.UNAUTHENTICATED.withDescription("Missing or invalid Authorization header"),
           new Metadata());
+      metrics.incrementAuthorizationCounter(FAILURE);
       return new ServerCall.Listener<ReqT>() {};
     }
 
@@ -82,11 +89,13 @@ public final class JwtInterceptor implements ServerInterceptor {
               .withValue(ISSUER_CONTEXT_KEY, issuer)
               .withValue(SUBJECT_CONTEXT_KEY, subject)
               .withValue(AUDIENCE_CONTEXT_KEY, audiences);
+      metrics.incrementAuthorizationCounter(SUCCESS);
       return Contexts.interceptCall(context, call, headers, next);
     } catch (JwtException e) {
       logger.atWarning().withCause(e).log("Failed to parse JWT token");
       call.close(
           Status.UNAUTHENTICATED.withDescription("Failed to parse JWT token"), new Metadata());
+      metrics.incrementAuthorizationCounter(FAILURE);
       return new ServerCall.Listener<ReqT>() {};
     }
   }

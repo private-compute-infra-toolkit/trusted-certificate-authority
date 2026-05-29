@@ -24,6 +24,7 @@ import com.google.mbs.MbsCertificateFactory;
 import com.google.mbs.MeasurementBoundCertificate;
 import com.google.mbs.MeasurementBoundCertificateProvider;
 import com.google.mbs.attestationcollection.AttestationToken;
+import com.google.tca.adapters.oidc.ServiceRegion;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Singleton;
 import java.security.Security;
@@ -31,6 +32,8 @@ import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.Optional;
 import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -52,7 +55,9 @@ public class LocalModeModule extends AbstractModule {
   }
 
   @Override
-  protected void configure() {}
+  protected void configure() {
+    bind(String.class).annotatedWith(ServiceRegion.class).toInstance("local");
+  }
 
   @Provides
   @Singleton
@@ -85,7 +90,10 @@ public class LocalModeModule extends AbstractModule {
                 new MbsCertificateFactory.CertSignatureSpec("RSA", 4096, "SHA256withRSA"),
                 new X500Name("CN=TCA Local"),
                 Duration.ofDays(120),
-                Optional.empty(),
+                Optional.of(
+                    new GeneralNames(
+                        new GeneralName(
+                            GeneralName.uniformResourceIdentifier, "spiffe://tca.local.test"))),
                 KeyUsage.keyCertSign)
             .generate();
 

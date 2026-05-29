@@ -25,6 +25,12 @@ policies {
           permitted_subtree: ".example2.org"
         }
       }
+      certificate_subject {
+        attributes {
+          key: "2.5.4.3"
+          value: "test"
+        }
+      }
     }
     reference_values {
       oak_reference_values {

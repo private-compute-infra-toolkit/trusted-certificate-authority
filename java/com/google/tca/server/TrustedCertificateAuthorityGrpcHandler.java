@@ -31,6 +31,7 @@ import jakarta.inject.Inject;
 import java.io.IOException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.List;
 import java.util.Set;
 
 public class TrustedCertificateAuthorityGrpcHandler extends TrustedCertificateAuthorityImplBase {
@@ -62,13 +63,14 @@ public class TrustedCertificateAuthorityGrpcHandler extends TrustedCertificateAu
           "Received a request with evidence of type %s",
           request.getAttestationEvidence().getEvidenceCase());
 
-      X509Certificate signedCertificate =
+      List<X509Certificate> certificateChain =
           trustedCaService.issueCertificate(domainRequest, callerIdentity);
 
-      IssueCertificateResponse response =
-          IssueCertificateResponse.newBuilder()
-              .addSignedCertificates(ByteString.copyFrom(signedCertificate.getEncoded()))
-              .build();
+      IssueCertificateResponse.Builder responseBuilder = IssueCertificateResponse.newBuilder();
+      for (X509Certificate cert : certificateChain) {
+        responseBuilder.addSignedCertificates(ByteString.copyFrom(cert.getEncoded()));
+      }
+      IssueCertificateResponse response = responseBuilder.build();
 
       responseObserver.onNext(response);
       responseObserver.onCompleted();

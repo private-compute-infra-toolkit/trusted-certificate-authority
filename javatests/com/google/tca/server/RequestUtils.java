@@ -91,7 +91,7 @@ public class RequestUtils {
                   {
                     "type": "https://github.com/pcit/pes/docs/claims/v1/publisher.md",
                     "annotations": {
-                      "publisher_id": "default_publisher_id"
+                      "publisher_id": "default_publisher_id@example.com"
                     }
                   },
                   {
@@ -136,7 +136,7 @@ public class RequestUtils {
                   {
                     "type": "https://github.com/pcit/pes/docs/claims/v1/publisher.md",
                     "annotations": {
-                      "publisher_id": "default_publisher_id"
+                      "publisher_id": "default_publisher_id@example.com"
                     }
                   },
                   {
@@ -208,7 +208,7 @@ public class RequestUtils {
               {
                 "type": "https://github.com/pcit/pes/docs/claims/v1/publisher.md",
                 "annotations": {
-                  "publisher_id": "default_publisher_id"
+                  "publisher_id": "default_publisher_id@example.com"
                 }
               },
               {

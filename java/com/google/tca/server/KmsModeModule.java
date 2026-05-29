@@ -30,12 +30,14 @@ import com.google.mbs.MeasurementBoundCertificate;
 import com.google.mbs.MeasurementBoundCertificateProvider;
 import com.google.mbs.attestationcollection.AttestationCollector;
 import com.google.tca.adapters.PolicyBucket;
+import com.google.tca.adapters.oidc.ServiceRegion;
 import com.google.tlog.TransparencyLogClient;
 import jakarta.inject.Singleton;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
 import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.asn1.x509.GeneralName;
 import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.KeyUsage;
 import software.amazon.awssdk.regions.Region;
@@ -48,7 +50,11 @@ public class KmsModeModule extends AbstractModule {
   private final AwsInstanceMetadata awsInstanceMetadata;
 
   public KmsModeModule(KmsArgs args) {
-    this.awsInstanceMetadata = new ImdsClient().getAwsInstanceMetadata();
+    this(args, new ImdsClient().getAwsInstanceMetadata());
+  }
+
+  public KmsModeModule(KmsArgs args, AwsInstanceMetadata awsInstanceMetadata) {
+    this.awsInstanceMetadata = awsInstanceMetadata;
     AwsResourceNamesProvider provider = new AwsResourceNamesProvider(args, awsInstanceMetadata);
     this.awsResourceNames = provider.getRecord();
   }
@@ -60,6 +66,7 @@ public class KmsModeModule extends AbstractModule {
     bind(String.class)
         .annotatedWith(PolicyBucket.class)
         .toInstance(awsResourceNames.configBucketName());
+    bind(String.class).annotatedWith(ServiceRegion.class).toInstance(awsInstanceMetadata.region());
   }
 
   @Provides
@@ -80,7 +87,19 @@ public class KmsModeModule extends AbstractModule {
       AttestationCollector attestationCollector) {
     String resourceNamesJson = new Gson().toJson(awsResourceNames);
     byte[] userData = resourceNamesJson.getBytes(StandardCharsets.UTF_8);
-    Optional<GeneralNames> noSan = Optional.empty();
+
+    String env = awsInstanceMetadata.environment();
+    String domain = awsInstanceMetadata.domain();
+    String operatorRole = awsInstanceMetadata.accountId();
+    String trustDomain = constructTrustDomain(env, domain);
+    String spiffeId =
+        String.format(
+            "spiffe://%s/operator/pcit.goog/%s/publisher/google.com/pcit-release-bot/workload/trusted-certificate-authority",
+            trustDomain, operatorRole);
+    GeneralName uriSan = new GeneralName(GeneralName.uniformResourceIdentifier, spiffeId);
+    Optional<GeneralNames> san = Optional.of(new GeneralNames(uriSan));
+    logger.atInfo().log("Setting root certificate Subject Alternative Name (SAN): %s", spiffeId);
+
     return new KmsMeasurementBoundCertificateProvider(
         kmsClient,
         s3Client,
@@ -93,7 +112,7 @@ public class KmsModeModule extends AbstractModule {
             new MbsCertificateFactory.CertSignatureSpec("RSA", 4096, "SHA256withRSA"),
             new X500Name("C=US, O=Google LLC, CN=TCA Root"),
             Duration.ofDays(120),
-            noSan,
+            san,
             KeyUsage.keyCertSign));
   }
 
@@ -111,5 +130,16 @@ public class KmsModeModule extends AbstractModule {
       MeasurementBoundCertificateProvider certificateProvider) throws Exception {
     logger.atInfo().log("TCA Module: KMS-backed mode.");
     return certificateProvider.loadOrGenerateCertificate();
+  }
+
+  private static String constructTrustDomain(String env, String domain) {
+    if ("prod".equals(env)) {
+      String cleanedDomain = domain;
+      if (domain.startsWith("aws.")) {
+        cleanedDomain = domain.substring("aws.".length());
+      }
+      return "tca." + cleanedDomain;
+    }
+    return String.format("tca.%s.%s", env, domain);
   }
 }

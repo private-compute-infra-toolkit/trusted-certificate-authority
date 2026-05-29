@@ -58,6 +58,7 @@ java_test(
         "//java/com/google/tca/domain",
         "//java/com/google/tca/domain/policy",
         "@maven//:com_google_guava_guava",
+        "@maven//:com_google_protobuf_protobuf_java",
         "@maven//:com_google_truth_truth",
         "@maven//:junit_junit",
         "@maven//:org_bouncycastle_bcpkix_jdk18on",
@@ -97,5 +98,20 @@ java_test(
         "@maven//:junit_junit",
         "@oak//proto/attestation:reference_value_java_proto",
         "@pcit_api//google/tca/policy/v1:tca_policy_java_proto",
+    ],
+)
+
+java_test(
+    name = "SystemMetricsTest",
+    size = "small",
+    srcs = ["SystemMetricsTest.java"],
+    test_class = "com.google.tca.adapters.SystemMetricsTest",
+    deps = [
+        "//java/com/google/tca/adapters",
+        "//java/com/google/tca/domain/metric",
+        "@maven//:com_google_truth_truth",
+        "@maven//:io_micrometer_micrometer_core",
+        "@maven//:io_micrometer_micrometer_registry_prometheus",
+        "@maven//:junit_junit",
     ],
 )

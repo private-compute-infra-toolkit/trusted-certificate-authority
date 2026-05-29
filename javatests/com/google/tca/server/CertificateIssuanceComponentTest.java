@@ -52,6 +52,7 @@ import java.security.PublicKey;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import org.bouncycastle.asn1.ASN1OctetString;
 import org.bouncycastle.asn1.x500.X500Name;
@@ -96,7 +97,7 @@ public class CertificateIssuanceComponentTest {
         new FileFetcherStub(
             ByteString.copyFromUtf8(
                 readTestFile("javatests/com/google/tca/server/testdata/policy.textproto")
-                    .replace("{publisher_id_to_replace}", "default_publisher_id")
+                    .replace("{publisher_id_to_replace}", "default_publisher_id@example.com")
                     .replace("{workload_id_to_replace}", "default_workload_id")
                     .replace("issuer: \"https://accounts.google.com\"", "issuer: \"test-issuer\"")
                     .replace("subject: \"jwt-token-test-sub\"", "subject: \"test-subject\"")
@@ -154,10 +155,13 @@ public class CertificateIssuanceComponentTest {
             .setCertificateSigningRequest(ByteString.copyFrom(csr.getEncoded()))
             .build();
 
-    X509Certificate issuedCert =
+    List<X509Certificate> issuedCerts =
         trustedCaService.issueCertificate(
             request, new CallerIdentity("test-issuer", "test-subject", java.util.Set.of()));
 
+    assertEquals(2, issuedCerts.size());
+
+    X509Certificate issuedCert = issuedCerts.get(0);
     assertEquals("CN=test", issuedCert.getSubjectX500Principal().getName());
     issuedCert.verify(rootCertificate.getPublicKey());
 
@@ -167,7 +171,7 @@ public class CertificateIssuanceComponentTest {
 
     // Verify the SAN extension
     String expectedSpiffeId =
-        "spiffe://example.org/operator/test_operator/publisher/default_publisher_id/workload/default_workload_id";
+        "spiffe://example.org/operator/test_operator/publisher/example.com/default_publisher_id/workload/default_workload_id";
     GeneralNames names =
         GeneralNames.getInstance(
             ASN1OctetString.getInstance(
@@ -176,6 +180,8 @@ public class CertificateIssuanceComponentTest {
     GeneralName sanEntry = names.getNames()[0];
     assertThat(sanEntry.getTagNo()).isEqualTo(GeneralName.uniformResourceIdentifier);
     assertThat(sanEntry.getName().toString()).isEqualTo(expectedSpiffeId);
+
+    assertEquals(rootCertificate, issuedCerts.get(1));
   }
 
   private static KeyPair generateKeyPair() throws NoSuchAlgorithmException {

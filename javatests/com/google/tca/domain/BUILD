@@ -33,11 +33,26 @@ java_test(
     deps = [
         "//java/com/google/tca/domain",
         "//java/com/google/tca/domain/attestation",
+        "//java/com/google/tca/domain/metric",
         "//java/com/google/tca/domain/policy",
         "@maven//:com_google_guava_guava",
         "@maven//:com_google_protobuf_protobuf_java",
         "@maven//:junit_junit",
         "@maven//:org_bouncycastle_bcpkix_jdk18on",
+        "@maven//:org_bouncycastle_bcprov_jdk18on",
+        "@maven//:org_mockito_mockito_core",
+    ],
+)
+
+java_test(
+    name = "TrustDomainExtractorTest",
+    size = "small",
+    srcs = ["TrustDomainExtractorTest.java"],
+    test_class = "com.google.tca.domain.TrustDomainExtractorTest",
+    deps = [
+        "//java/com/google/tca/domain",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
         "@maven//:org_bouncycastle_bcprov_jdk18on",
         "@maven//:org_mockito_mockito_core",
     ],

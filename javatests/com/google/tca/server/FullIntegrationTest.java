@@ -30,15 +30,22 @@ import com.google.mbs.MeasurementBoundCertificate;
 import com.google.mbs.attestationcollection.AttestationToken;
 import com.google.tca.adapters.PolicyBucket;
 import com.google.tca.domain.TimeProvider;
+import com.google.tca.domain.metric.Metrics;
+import com.google.tca.domain.metric.ProcessingStatus;
 import com.google.tca.v1.IssueCertificateRequest;
 import com.google.tca.v1.IssueCertificateResponse;
 import com.google.tca.v1.TrustedCertificateAuthorityGrpc;
+import com.linecorp.armeria.client.WebClient;
+import com.linecorp.armeria.common.AggregatedHttpResponse;
+import com.linecorp.armeria.common.HttpStatus;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
-import io.grpc.ServerInterceptors;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.testing.GrpcCleanupRule;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -62,6 +69,7 @@ import org.bouncycastle.asn1.x509.GeneralSubtree;
 import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.asn1.x509.NameConstraints;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -86,6 +94,7 @@ import software.amazon.awssdk.services.s3.model.S3Object;
 
 @RunWith(JUnit4.class)
 public class FullIntegrationTest {
+  private static final int ANY_PORT = 0;
 
   @Rule public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
@@ -95,6 +104,8 @@ public class FullIntegrationTest {
   private static final String BUCKET_NAME = "test-bucket";
 
   private Injector injector;
+  private TcaServer tcaServer;
+  private WebClient httpClient;
   private TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub client;
 
   public static LocalStackContainer localstack =
@@ -120,6 +131,13 @@ public class FullIntegrationTest {
     setupServerAndClient();
   }
 
+  @After
+  public void tearDown() {
+    if (tcaServer != null) {
+      tcaServer.stop().join();
+    }
+  }
+
   private void setupServerAndClient() throws CertificateException, IOException {
     LocalArgs localArgs = new LocalArgs();
 
@@ -133,7 +151,10 @@ public class FullIntegrationTest {
                 new MbsCertificateFactory.CertSignatureSpec("RSA", 4096, "SHA256withRSA"),
                 new X500Name("CN=Standalone CA"),
                 Duration.ofDays(30),
-                Optional.empty(),
+                Optional.of(
+                    new GeneralNames(
+                        new GeneralName(
+                            GeneralName.uniformResourceIdentifier, "spiffe://tca.local.test"))),
                 KeyUsage.keyCertSign)
             .generate();
 
@@ -179,21 +200,18 @@ public class FullIntegrationTest {
     TrustedCertificateAuthorityGrpcHandler service =
         injector.getInstance(TrustedCertificateAuthorityGrpcHandler.class);
     JwtInterceptor jwtInterceptor = injector.getInstance(JwtInterceptor.class);
+    PrometheusMeterRegistry meterRegistry = injector.getInstance(PrometheusMeterRegistry.class);
 
-    String serverName = "test-server";
-    grpcCleanup.register(
-        io.grpc.inprocess.InProcessServerBuilder.forName(serverName)
-            .directExecutor()
-            .addService(ServerInterceptors.intercept(service, jwtInterceptor))
-            .build()
-            .start());
+    tcaServer = new TcaServer(ANY_PORT, service, jwtInterceptor, meterRegistry);
+    tcaServer.start().join();
 
-    client =
-        TrustedCertificateAuthorityGrpc.newBlockingStub(
-            grpcCleanup.register(
-                io.grpc.inprocess.InProcessChannelBuilder.forName(serverName)
-                    .directExecutor()
-                    .build()));
+    httpClient = WebClient.of("http://127.0.0.1:" + tcaServer.port());
+
+    ManagedChannel channel =
+        grpcCleanup.register(
+            ManagedChannelBuilder.forAddress("localhost", tcaServer.port()).usePlaintext().build());
+
+    client = TrustedCertificateAuthorityGrpc.newBlockingStub(channel);
 
     Metadata metadata = new Metadata();
     metadata.put(
@@ -252,7 +270,7 @@ public class FullIntegrationTest {
 
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
 
-    assertEquals(1, response.getSignedCertificatesCount());
+    assertEquals(2, response.getSignedCertificatesCount());
 
     X509Certificate signedCert =
         (X509Certificate)
@@ -261,17 +279,21 @@ public class FullIntegrationTest {
 
     X509Certificate rootCert = injector.getInstance(X509Certificate.class);
 
+    X509Certificate responseRootCert =
+        (X509Certificate)
+            cf.generateCertificate(
+                new ByteArrayInputStream(response.getSignedCertificates(1).toByteArray()));
+    assertEquals(rootCert, responseRootCert);
+
     signedCert.verify(rootCert.getPublicKey());
-    assertEquals("CN=OakWorkload", signedCert.getSubjectX500Principal().getName());
+    assertEquals("CN=test", signedCert.getSubjectX500Principal().getName());
 
     // Verify certificate validity
     assertThat(signedCert.getNotBefore().toInstant()).isEqualTo(testTime);
     assertThat(signedCert.getNotAfter().toInstant()).isEqualTo(testTime.plusSeconds(3600));
 
     String expectedSpiffeId =
-        "spiffe://example.org/operator/test_operator/publisher/"
-            + goldenRequest.getPublisherId()
-            + "/workload/"
+        "spiffe://example.org/operator/test_operator/publisher/google.com/pcit-release-bot/workload/"
             + goldenRequest.getWorkloadId();
 
     // Verify the SAN extension
@@ -310,6 +332,12 @@ public class FullIntegrationTest {
                 .getOctets());
     assertThat(basicConstraints.isCA()).isTrue();
     assertThat(basicConstraints.getPathLenConstraint().intValue()).isEqualTo(1);
+
+    // Verify metrics are collected and exposed
+    AggregatedHttpResponse res = httpClient.get("/metrics").aggregate().join();
+    assertThat(res.status()).isEqualTo(HttpStatus.OK);
+    assertThat(res.contentUtf8()).contains("tca_server_total_duration_seconds");
+    assertThat(res.contentUtf8()).contains("tca_server_response_length");
   }
 
   @Test
@@ -323,6 +351,71 @@ public class FullIntegrationTest {
     assertEquals(Status.Code.INVALID_ARGUMENT, thrown.getStatus().getCode());
     assertThat(thrown.getStatus().getDescription())
         .contains("No policy supports requested workload");
+  }
+
+  @Test
+  public void metricsEndpoint_returnsPrometheusMetrics() {
+    AggregatedHttpResponse res = httpClient.get("/metrics").aggregate().join();
+    assertThat(res.status()).isEqualTo(HttpStatus.OK);
+    assertThat(res.contentUtf8()).contains("armeria_server_connections");
+    System.out.println(res.contentUtf8());
+  }
+
+  @Test
+  public void customMetrics_collectedAndExposed_succeeds() {
+    Metrics metrics = injector.getInstance(Metrics.class);
+
+    // Initially, both metric arrays should be registered and present in scrape with 0.0 values
+    AggregatedHttpResponse initialRes = httpClient.get("/metrics").aggregate().join();
+    assertThat(initialRes.status()).isEqualTo(HttpStatus.OK);
+    assertThat(initialRes.contentUtf8())
+        .contains("tca_authorizationStatus_total{status=\"success\"} 0.0");
+    assertThat(initialRes.contentUtf8())
+        .contains("tca_authorizationStatus_total{status=\"failure\"} 0.0");
+    assertThat(initialRes.contentUtf8())
+        .contains("tca_processingStatus_total{status=\"success\"} 0.0");
+    assertThat(initialRes.contentUtf8())
+        .contains("tca_processingStatus_total{status=\"missing_policy\"} 0.0");
+
+    // Increment specific targets
+    metrics.incrementAuthorizationCounter(com.google.tca.domain.metric.Status.SUCCESS);
+    metrics.incrementProcessingCounter(ProcessingStatus.SUCCESS);
+
+    // Verify targeted indices are incremented while others remain at 0.0
+    AggregatedHttpResponse res = httpClient.get("/metrics").aggregate().join();
+    assertThat(res.status()).isEqualTo(HttpStatus.OK);
+    assertThat(res.contentUtf8()).contains("tca_authorizationStatus_total{status=\"success\"} 1.0");
+    assertThat(res.contentUtf8()).contains("tca_authorizationStatus_total{status=\"failure\"} 0.0");
+    assertThat(res.contentUtf8()).contains("tca_processingStatus_total{status=\"success\"} 1.0");
+    assertThat(res.contentUtf8())
+        .contains("tca_processingStatus_total{status=\"missing_policy\"} 0.0");
+  }
+
+  @Test
+  public void customMetrics_metadataAndTypeExposed_succeeds() {
+    // Force instantiation to trigger constructor metrics registration
+    injector.getInstance(Metrics.class);
+
+    AggregatedHttpResponse res = httpClient.get("/metrics").aggregate().join();
+    assertThat(res.status()).isEqualTo(HttpStatus.OK);
+
+    // Verify HELP metadata headers
+    assertThat(res.contentUtf8())
+        .contains(
+            "# HELP tca_authorizationStatus_total Metrics tracking for tca.authorizationStatus");
+    assertThat(res.contentUtf8())
+        .contains("# HELP tca_processingStatus_total Metrics tracking for tca.processingStatus");
+
+    // Verify TYPE metadata headers
+    assertThat(res.contentUtf8()).contains("# TYPE tca_authorizationStatus_total counter");
+    assertThat(res.contentUtf8()).contains("# TYPE tca_processingStatus_total counter");
+
+    // Verify raw initial value line format
+    assertThat(res.contentUtf8()).contains("tca_authorizationStatus_total{status=\"success\"} 0.0");
+    assertThat(res.contentUtf8()).contains("tca_authorizationStatus_total{status=\"failure\"} 0.0");
+    assertThat(res.contentUtf8()).contains("tca_processingStatus_total{status=\"success\"} 0.0");
+    assertThat(res.contentUtf8())
+        .contains("tca_processingStatus_total{status=\"missing_policy\"} 0.0");
   }
 
   private static String readTestFile(String path) throws Exception {

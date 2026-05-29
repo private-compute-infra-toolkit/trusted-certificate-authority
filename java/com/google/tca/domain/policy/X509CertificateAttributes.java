@@ -19,4 +19,6 @@ package com.google.tca.domain.policy;
 import java.time.Duration;
 
 public record X509CertificateAttributes(
-    Duration maxCertificateValidity, X509Extensions extensions) {}
+    Duration maxCertificateValidity,
+    X509Extensions extensions,
+    X500NameAttributes certificateSubject) {}

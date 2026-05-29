@@ -20,7 +20,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.AdditionalMatchers.aryEq;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
@@ -31,9 +30,11 @@ import com.google.tca.domain.attestation.AttestationVerifier;
 import com.google.tca.domain.attestation.AttestationVerifierProvider;
 import com.google.tca.domain.attestation.EndorsementAnnotations;
 import com.google.tca.domain.attestation.Validity;
+import com.google.tca.domain.metric.Metrics;
 import com.google.tca.domain.policy.Policy;
 import com.google.tca.domain.policy.ReferenceValues;
 import com.google.tca.domain.policy.ReferenceValuesType;
+import com.google.tca.domain.policy.X500NameAttributes;
 import com.google.tca.domain.policy.X509CertificateAttributes;
 import com.google.tca.domain.policy.X509Extensions;
 import java.security.KeyPair;
@@ -45,8 +46,10 @@ import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import javax.security.auth.x500.X500Principal;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
@@ -75,6 +78,7 @@ public class TrustedCaServiceTest {
   @Mock private EndorsementMetadataProvider mockEndorsementMetadataProvider;
   @Mock private CertificateModifiersCreator mockCertificateModifiersCreator;
   @Mock private AudienceBindingValidator mockAudienceBindingValidator;
+  @Mock private Metrics mockMetrics;
 
   final Instant testTime = Instant.parse("2026-06-17T16:14:30.513000Z");
 
@@ -94,7 +98,8 @@ public class TrustedCaServiceTest {
             mockTimeProvider,
             mockEndorsementMetadataProvider,
             mockCertificateModifiersCreator,
-            mockAudienceBindingValidator);
+            mockAudienceBindingValidator,
+            mockMetrics);
   }
 
   @Test
@@ -131,7 +136,8 @@ public class TrustedCaServiceTest {
             mockTimeProvider,
             mockEndorsementMetadataProvider,
             mockCertificateModifiersCreator,
-            mockAudienceBindingValidator);
+            mockAudienceBindingValidator,
+            mockMetrics);
 
     when(mockCertificateSigner.signCsr(
             aryEq(csrBytes),
@@ -140,13 +146,15 @@ public class TrustedCaServiceTest {
             any(),
             any(),
             any(),
-            anyBoolean()))
+            eq(new X500Principal("CN=policy-subject"))))
         .thenReturn(mockChildCertificate);
 
-    X509Certificate signedCert =
+    List<X509Certificate> signedCerts =
         serviceWithRealCrypto.issueCertificate(
             request, createIdentityWithBinding(keyPair.getPublic()));
-    assertEquals(signedCert, mockChildCertificate);
+    assertEquals(2, signedCerts.size());
+    assertEquals(signedCerts.get(0), mockChildCertificate);
+    assertEquals(signedCerts.get(1), mockRootCertificate);
   }
 
   @Test
@@ -180,14 +188,16 @@ public class TrustedCaServiceTest {
             any(),
             any(),
             any(),
-            anyBoolean()))
+            eq(new X500Principal("CN=policy-subject"))))
         .thenReturn(mockChildCertificate);
 
     // Identity has binding for a different key
     CallerIdentity identity = createIdentityWithBinding(differentKeyPair.getPublic());
 
-    X509Certificate signedCert = trustedCaService.issueCertificate(request, identity);
-    assertEquals(signedCert, mockChildCertificate);
+    List<X509Certificate> signedCerts = trustedCaService.issueCertificate(request, identity);
+    assertEquals(2, signedCerts.size());
+    assertEquals(signedCerts.get(0), mockChildCertificate);
+    assertEquals(signedCerts.get(1), mockRootCertificate);
   }
 
   @Test
@@ -220,13 +230,15 @@ public class TrustedCaServiceTest {
             any(),
             any(),
             any(),
-            anyBoolean()))
+            eq(new X500Principal("CN=policy-subject"))))
         .thenReturn(mockChildCertificate);
 
-    X509Certificate signedCert =
+    List<X509Certificate> signedCerts =
         trustedCaService.issueCertificate(
             request, new CallerIdentity("issuer", "subject", Set.of()));
-    assertEquals(signedCert, mockChildCertificate);
+    assertEquals(2, signedCerts.size());
+    assertEquals(signedCerts.get(0), mockChildCertificate);
+    assertEquals(signedCerts.get(1), mockRootCertificate);
   }
 
   @Test
@@ -354,7 +366,9 @@ public class TrustedCaServiceTest {
         "test-operator",
         List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)),
         new X509CertificateAttributes(
-            Duration.ofHours(1), new X509Extensions(Optional.empty(), Optional.empty())));
+            Duration.ofHours(1),
+            new X509Extensions(Optional.empty(), Optional.empty()),
+            new X500NameAttributes(Map.of("2.5.4.3", "policy-subject"))));
   }
 
   private EndorsementAnnotations createValidEndorsementProperties() {

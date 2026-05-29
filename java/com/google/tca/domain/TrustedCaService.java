@@ -18,6 +18,11 @@ package com.google.tca.domain;
 
 import static com.google.common.collect.Comparators.max;
 import static com.google.common.collect.Comparators.min;
+import static com.google.tca.domain.metric.ProcessingStatus.INCORRECT_CERTIFICATE_VALIDITY;
+import static com.google.tca.domain.metric.ProcessingStatus.INVALID_ATTESTATION_TOKEN;
+import static com.google.tca.domain.metric.ProcessingStatus.MISSING_POLICY;
+import static com.google.tca.domain.metric.ProcessingStatus.MISSING_VERIFIER;
+import static com.google.tca.domain.metric.ProcessingStatus.SUCCESS;
 
 import com.google.common.flogger.FluentLogger;
 import com.google.tca.domain.attestation.AttestationEvidence;
@@ -25,8 +30,9 @@ import com.google.tca.domain.attestation.AttestationVerifier;
 import com.google.tca.domain.attestation.AttestationVerifierProvider;
 import com.google.tca.domain.attestation.EndorsementAnnotations;
 import com.google.tca.domain.attestation.Validity;
-import com.google.tca.domain.policy.BasicConstraintsType;
+import com.google.tca.domain.metric.Metrics;
 import com.google.tca.domain.policy.Policy;
+import com.google.tca.domain.policy.X500NameAttributes;
 import jakarta.inject.Inject;
 import java.io.IOException;
 import java.security.PrivateKey;
@@ -35,7 +41,12 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import javax.security.auth.x500.X500Principal;
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
+import org.bouncycastle.asn1.x500.X500NameBuilder;
+import org.bouncycastle.asn1.x500.style.BCStyle;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 
 public class TrustedCaService {
@@ -51,6 +62,7 @@ public class TrustedCaService {
   private final EndorsementMetadataProvider endorsementMetadataProvider;
   private final CertificateModifiersCreator certificateModifiersCreator;
   private final AudienceBindingValidator audienceBindingValidator;
+  private final Metrics metrics;
 
   @Inject
   public TrustedCaService(
@@ -63,7 +75,8 @@ public class TrustedCaService {
       TimeProvider timeProvider,
       EndorsementMetadataProvider endorsementMetadataProvider,
       CertificateModifiersCreator certificateModifiersCreator,
-      AudienceBindingValidator audienceBindingValidator) {
+      AudienceBindingValidator audienceBindingValidator,
+      Metrics metrics) {
     this.rootCertificate = rootCertificate;
     this.privateKey = privateKey;
     this.verifierProvider = verifierProvider;
@@ -74,9 +87,10 @@ public class TrustedCaService {
     this.endorsementMetadataProvider = endorsementMetadataProvider;
     this.certificateModifiersCreator = certificateModifiersCreator;
     this.audienceBindingValidator = audienceBindingValidator;
+    this.metrics = metrics;
   }
 
-  public X509Certificate issueCertificate(
+  public List<X509Certificate> issueCertificate(
       CertificateIssuanceRequest request, CallerIdentity callerIdentity)
       throws java.io.IOException, CertificateException {
     PublicKey csrPublicKey = extractPublicKey(request);
@@ -89,6 +103,7 @@ public class TrustedCaService {
         policyProvider.getPolicy(
             callerIdentity, annotations.publisherId(), annotations.workloadId());
     if (policyOpt.isEmpty()) {
+      metrics.incrementProcessingCounter(MISSING_POLICY);
       throw new IllegalArgumentException(
           String.format(
               "No policy supports requested workload: {clientId = %s, publisherId = %s,"
@@ -99,6 +114,7 @@ public class TrustedCaService {
 
     Optional<AttestationVerifier> verifierOpt = verifierProvider.getVerifier(evidence);
     if (verifierOpt.isEmpty()) {
+      metrics.incrementProcessingCounter(MISSING_VERIFIER);
       throw new IllegalArgumentException("Unsupported attestation platform");
     }
     AttestationVerifier verifier = verifierOpt.get();
@@ -109,6 +125,7 @@ public class TrustedCaService {
             .anyMatch(rv -> verifier.verify(evidence, csrPublicKey, rv));
 
     if (!hasBeenVerified) {
+      metrics.incrementProcessingCounter(INVALID_ATTESTATION_TOKEN);
       throw new IllegalArgumentException("Attestation token is not valid");
     }
 
@@ -119,25 +136,30 @@ public class TrustedCaService {
     Instant certificateValidityStart = max(now, validity.notBefore());
 
     if (certificateValidityStart.isAfter(certificateValidityEnd)) {
+      metrics.incrementProcessingCounter(INCORRECT_CERTIFICATE_VALIDITY);
       throw new IllegalArgumentException("Incorrect certificate validity");
     }
 
     List<CertificateModifier> modifiers = certificateModifiersCreator.create(policy);
-    boolean isCa =
-        policy
-            .certificateAttributes()
-            .extensions()
-            .basicConstraints()
-            .map(bc -> bc.type() == BasicConstraintsType.CA)
-            .orElse(false);
-    return certificateSigner.signCsr(
-        request.getCertificateSigningRequest().toByteArray(),
-        rootCertificate,
-        privateKey,
-        certificateValidityStart,
-        certificateValidityEnd,
-        modifiers,
-        isCa);
+    X509Certificate signedCertificate =
+        certificateSigner.signCsr(
+            request.getCertificateSigningRequest().toByteArray(),
+            rootCertificate,
+            privateKey,
+            certificateValidityStart,
+            certificateValidityEnd,
+            modifiers,
+            createSubjectPrincipal(policy.certificateAttributes().certificateSubject()));
+    metrics.incrementProcessingCounter(SUCCESS);
+    return List.of(signedCertificate, rootCertificate);
+  }
+
+  private X500Principal createSubjectPrincipal(X500NameAttributes subject) throws IOException {
+    X500NameBuilder subjectBuilder = new X500NameBuilder(BCStyle.INSTANCE);
+    for (Map.Entry<String, String> entry : subject.attributes().entrySet()) {
+      subjectBuilder.addRDN(new ASN1ObjectIdentifier(entry.getKey()), entry.getValue());
+    }
+    return new X500Principal(subjectBuilder.build().getEncoded());
   }
 
   private PublicKey extractPublicKey(CertificateIssuanceRequest request) throws IOException {

@@ -24,15 +24,19 @@ import com.linecorp.armeria.common.AggregatedHttpRequest;
 import com.linecorp.armeria.common.AggregatedHttpResponse;
 import com.linecorp.armeria.common.HttpResponse;
 import com.linecorp.armeria.common.HttpStatus;
+import com.linecorp.armeria.common.grpc.GrpcMeterIdPrefixFunction;
 import com.linecorp.armeria.server.DecoratingHttpServiceFunction;
 import com.linecorp.armeria.server.Server;
 import com.linecorp.armeria.server.ServiceRequestContext;
 import com.linecorp.armeria.server.grpc.GrpcService;
 import com.linecorp.armeria.server.logging.LoggingService;
+import com.linecorp.armeria.server.metric.MetricCollectingService;
+import com.linecorp.armeria.server.prometheus.PrometheusExpositionService;
 import io.grpc.ServerInterceptors;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.protobuf.services.ProtoReflectionService;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -46,7 +50,10 @@ public class TcaServer {
   private final int port;
 
   public TcaServer(
-      int port, TrustedCertificateAuthorityGrpcHandler service, JwtInterceptor jwtInterceptor) {
+      int port,
+      TrustedCertificateAuthorityGrpcHandler service,
+      JwtInterceptor jwtInterceptor,
+      PrometheusMeterRegistry meterRegistry) {
     this.port = port;
     this.healthManager = new HealthManager();
 
@@ -61,7 +68,10 @@ public class TcaServer {
     this.server =
         Server.builder()
             .http(port)
-            .service(grpcService)
+            .meterRegistry(meterRegistry)
+            .service(
+                grpcService,
+                MetricCollectingService.newDecorator(GrpcMeterIdPrefixFunction.of("tca.server")))
             .service(
                 "/healthz",
                 (ctx, req) -> {
@@ -70,6 +80,8 @@ public class TcaServer {
                   }
                   return HttpResponse.of(HttpStatus.SERVICE_UNAVAILABLE);
                 })
+            .service(
+                "/metrics", PrometheusExpositionService.of(meterRegistry.getPrometheusRegistry()))
             .decorator(createErrorLoggingDecorator())
             .decorator(LoggingService.newDecorator())
             .build();

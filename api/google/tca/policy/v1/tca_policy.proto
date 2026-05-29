@@ -45,9 +45,15 @@ message ReferenceValues {
   }
 }
 
+// key = OID e.g.: "2.5.4.3" -> "Root CA"
+message X500NameAttributes {
+  map<string, string> attributes = 1;
+}
+
 message X509CertificateAttributes {
   google.protobuf.Duration max_certificate_validity = 1;
   X509Extensions x509_extensions = 2;
+  X500NameAttributes certificate_subject = 3;
 }
 
 message X509Extensions {

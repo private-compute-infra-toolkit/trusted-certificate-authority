@@ -29,6 +29,34 @@ java_test(
 )
 
 java_test(
+    name = "CertificateModifiersCreatorImplTest",
+    srcs = ["CertificateModifiersCreatorImplTest.java"],
+    test_class = "com.google.tca.adapters.certsigning.CertificateModifiersCreatorImplTest",
+    deps = [
+        "//java/com/google/tca/adapters/certsigning",
+        "//java/com/google/tca/domain",
+        "//java/com/google/tca/domain/policy",
+        "@maven//:com_google_protobuf_protobuf_java",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
+    ],
+)
+
+java_test(
+    name = "KeyUsageModifierTest",
+    srcs = ["KeyUsageModifierTest.java"],
+    test_class = "com.google.tca.adapters.certsigning.KeyUsageModifierTest",
+    deps = [
+        "//java/com/google/tca/adapters/certsigning",
+        "//java/com/google/tca/domain/policy",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
+        "@maven//:org_bouncycastle_bcpkix_jdk18on",
+        "@maven//:org_bouncycastle_bcprov_jdk18on",
+    ],
+)
+
+java_test(
     name = "SubjectAlternativeNameModifierTest",
     srcs = ["SubjectAlternativeNameModifierTest.java"],
     test_class = "com.google.tca.adapters.certsigning.SubjectAlternativeNameModifierTest",

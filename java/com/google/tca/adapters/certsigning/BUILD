@@ -19,6 +19,7 @@ java_library(
     srcs = [
         "BasicConstraintsModifier.java",
         "CertificateModifiersCreatorImpl.java",
+        "KeyUsageModifier.java",
         "NameConstraintsModifier.java",
         "SubjectAlternativeNameModifier.java",
     ],
