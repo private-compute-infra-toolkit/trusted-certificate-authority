@@ -107,6 +107,8 @@ public class FullIntegrationTest {
   private TcaServer tcaServer;
   private WebClient httpClient;
   private TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub client;
+  private TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub baseBlockingStub;
+  private java.security.PrivateKey jwtPrivateKey;
 
   public static LocalStackContainer localstack =
       new LocalStackContainer(DockerImageName.parse("localstack/localstack:4.14.0"))
@@ -172,12 +174,12 @@ public class FullIntegrationTest {
     } catch (java.security.NoSuchAlgorithmException e) {
       throw new RuntimeException(e);
     }
-    java.security.PrivateKey jwtPrivateKey = jwtKeyPair.getPrivate();
+    this.jwtPrivateKey = jwtKeyPair.getPrivate();
     java.security.PublicKey jwtPublicKey = jwtKeyPair.getPublic();
 
     injector =
         Guice.createInjector(
-            Modules.override(new TrustedCaModule(), new LocalModeModule(localArgs))
+            Modules.override(new TrustedCaModule())
                 .with(
                     new AbstractModule() {
                       @Override
@@ -194,6 +196,14 @@ public class FullIntegrationTest {
                                 io.jsonwebtoken.Locator<java.security.Key>>() {})
                             .annotatedWith(JwtAuth.class)
                             .toInstance(header -> jwtPublicKey);
+                        bind(AwsInstanceMetadata.class)
+                            .toInstance(
+                                AwsInstanceMetadata.builder()
+                                    .setRegion("local")
+                                    .setAccountId("dummy_account")
+                                    .setEnvironment("local")
+                                    .setDomain("pcit.goog")
+                                    .build());
                       }
                     }));
 
@@ -211,14 +221,37 @@ public class FullIntegrationTest {
         grpcCleanup.register(
             ManagedChannelBuilder.forAddress("localhost", tcaServer.port()).usePlaintext().build());
 
-    client = TrustedCertificateAuthorityGrpc.newBlockingStub(channel);
+    baseBlockingStub = TrustedCertificateAuthorityGrpc.newBlockingStub(channel);
 
     Metadata metadata = new Metadata();
     metadata.put(
         Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER),
-        "Bearer " + RequestUtils.createJwtToken(jwtPrivateKey));
+        "Bearer " + RequestUtils.createJwtToken(this.jwtPrivateKey));
 
-    client = client.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
+    client = baseBlockingStub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
+  }
+
+  private TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub withTokenForCsr(
+      byte[] csrBytes) throws Exception {
+    org.bouncycastle.pkcs.PKCS10CertificationRequest csr =
+        new org.bouncycastle.pkcs.PKCS10CertificationRequest(csrBytes);
+    byte[] csrPublicKeyBytes = csr.getSubjectPublicKeyInfo().getEncoded();
+    java.security.PublicKey csrPublicKey =
+        injector
+            .getInstance(com.google.tca.domain.KeyDecoder.class)
+            .decodeRawPublicKey(csrPublicKeyBytes);
+
+    java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+    byte[] hash = md.digest(csrPublicKey.getEncoded());
+    String digest = com.google.common.io.BaseEncoding.base16().lowerCase().encode(hash);
+    String audience = "https://tca.local.test/v1/certificates:issue?pubkey_sha256=" + digest;
+
+    Metadata metadata = new Metadata();
+    metadata.put(
+        Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER),
+        "Bearer " + RequestUtils.createJwtToken(this.jwtPrivateKey, audience));
+
+    return baseBlockingStub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
   }
 
   private static void initializeS3Client() {
@@ -266,7 +299,9 @@ public class FullIntegrationTest {
     when(timeProvider.currentTimeMillis()).thenReturn(testTime.toEpochMilli());
     when(timeProvider.now()).thenReturn(Instant.ofEpochMilli(testTime.toEpochMilli()));
 
-    IssueCertificateResponse response = client.issueCertificate(request);
+    IssueCertificateResponse response =
+        withTokenForCsr(request.getCertificateSigningRequest().toByteArray())
+            .issueCertificate(request);
 
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
 
@@ -346,8 +381,10 @@ public class FullIntegrationTest {
     GoldenRequest goldenRequest = new GoldenRequest();
     IssueCertificateRequest request = goldenRequest.getRequestBody();
 
+    TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub authStub =
+        withTokenForCsr(request.getCertificateSigningRequest().toByteArray());
     StatusRuntimeException thrown =
-        assertThrows(StatusRuntimeException.class, () -> client.issueCertificate(request));
+        assertThrows(StatusRuntimeException.class, () -> authStub.issueCertificate(request));
     assertEquals(Status.Code.INVALID_ARGUMENT, thrown.getStatus().getCode());
     assertThat(thrown.getStatus().getDescription())
         .contains("No policy supports requested workload");

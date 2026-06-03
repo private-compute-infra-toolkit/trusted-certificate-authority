@@ -38,8 +38,10 @@ java_test(
     deps = [
         "//java/com/google/tca/adapters/oidc",
         "//java/com/google/tca/domain",
+        "//java/com/google/tca/server:metadata",
         "@maven//:com_google_guava_guava",
         "@maven//:com_google_truth_truth",
         "@maven//:junit_junit",
+        "@maven//:org_mockito_mockito_core",
     ],
 )

@@ -24,7 +24,6 @@ import com.google.mbs.MbsCertificateFactory;
 import com.google.mbs.MeasurementBoundCertificate;
 import com.google.mbs.MeasurementBoundCertificateProvider;
 import com.google.mbs.attestationcollection.AttestationToken;
-import com.google.tca.adapters.oidc.ServiceRegion;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Singleton;
 import java.security.Security;
@@ -56,7 +55,14 @@ public class LocalModeModule extends AbstractModule {
 
   @Override
   protected void configure() {
-    bind(String.class).annotatedWith(ServiceRegion.class).toInstance("local");
+    bind(AwsInstanceMetadata.class)
+        .toInstance(
+            AwsInstanceMetadata.builder()
+                .setRegion("local")
+                .setAccountId("dummy_account")
+                .setEnvironment("local")
+                .setDomain("pcit.goog")
+                .build());
   }
 
   @Provides

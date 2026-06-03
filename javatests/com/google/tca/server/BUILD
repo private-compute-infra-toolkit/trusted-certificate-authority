@@ -101,6 +101,7 @@ java_test(
     deps = [
         ":FileFetcherStub",
         ":RequestUtils",
+        "//java/com/google/tca/adapters/oidc",
         "//java/com/google/tca/domain",
         "//java/com/google/tca/domain/attestation",
         "//java/com/google/tca/domain/policy",
@@ -108,6 +109,7 @@ java_test(
         "//java/com/google/tca/proto:trusted_certificate_authority_java_proto",
         "//java/com/google/tca/server",
         "//java/com/google/tca/server:cmd_line_args",
+        "//java/com/google/tca/server:metadata",
         "@com_google_protobuf//:protobuf_javalite",
         "@io_grpc_grpc_java//api",
         "@io_grpc_grpc_java//inprocess",
@@ -155,6 +157,7 @@ java_test(
         "//java/com/google/tca/proto:trusted_certificate_authority_java_proto",
         "//java/com/google/tca/server",
         "//java/com/google/tca/server:cmd_line_args",
+        "//java/com/google/tca/server:metadata",
         "@com_google_protobuf//:protobuf_javalite",
         "@com_google_protobuf//java/core",
         "@io_grpc_grpc_java//api",
@@ -194,6 +197,7 @@ java_test(
     deps = [
         "//java/com/google/tca/server",
         "//java/com/google/tca/server:cmd_line_args",
+        "//java/com/google/tca/server:metadata",
         "@maven//:com_google_guava_guava",
         "@maven//:com_google_truth_truth",
         "@maven//:junit_junit",
@@ -214,6 +218,7 @@ java_test(
     deps = [
         "//java/com/google/tca/server",
         "//java/com/google/tca/server:cmd_line_args",
+        "//java/com/google/tca/server:metadata",
         "@maven//:junit_junit",
         "@maven//:org_mockito_mockito_core",
     ],
@@ -235,6 +240,7 @@ java_test(
         "//java/com/google/tca/server",
         "//java/com/google/tca/server:cmd_line_args",
         "@com_google_protobuf//:protobuf_javalite",
+        "@maven//:com_google_guava_guava",
         "@maven//:com_google_inject_guice",
         "@maven//:com_google_truth_truth",
         "@maven//:jakarta_inject_jakarta_inject_api",

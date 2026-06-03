@@ -20,7 +20,6 @@ import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import org.bouncycastle.asn1.x509.GeneralName;
 
 /** Utility class to extract SPIFFE ID trust domain from root certificates. */
@@ -46,9 +45,8 @@ public final class TrustDomainExtractor {
     Collection<List<?>> sans = rootCertificate.getSubjectAlternativeNames();
     if (sans != null) {
       for (List<?> san : sans) {
-        Optional<String> trustDomain = tryParseTrustDomain(san);
-        if (trustDomain.isPresent()) {
-          return trustDomain.get();
+        if (isUriSan(san)) {
+          return tryParseTrustDomain(san);
         }
       }
     }
@@ -56,19 +54,15 @@ public final class TrustDomainExtractor {
         "Root certificate SAN does not contain a valid SPIFFE ID trust domain.");
   }
 
-  private static Optional<String> tryParseTrustDomain(List<?> san)
-      throws java.net.URISyntaxException {
-    if (!isUriSan(san)) {
-      return Optional.empty();
-    }
+  private static String tryParseTrustDomain(List<?> san) throws java.net.URISyntaxException {
     Object value = san.get(SAN_VALUE_INDEX);
     if (!(value instanceof String)) {
-      return Optional.empty();
+      throw new IllegalArgumentException(
+          String.format(
+              "URI SAN value is not a String. Expected: String, Actual: %s",
+              value != null ? value.getClass().getName() : "null"));
     }
     String spiffeId = (String) value;
-    if (!spiffeId.startsWith("spiffe://")) {
-      return Optional.empty();
-    }
     return extractTrustDomainFromSpiffeId(spiffeId);
   }
 
@@ -85,16 +79,34 @@ public final class TrustDomainExtractor {
         && (Integer) san.get(SAN_TAG_INDEX) == GeneralName.uniformResourceIdentifier;
   }
 
-  private static Optional<String> extractTrustDomainFromSpiffeId(String spiffeId)
+  private static String extractTrustDomainFromSpiffeId(String spiffeId)
       throws java.net.URISyntaxException {
+    if (!spiffeId.startsWith("spiffe://")) {
+      throw new IllegalArgumentException(
+          String.format(
+              "SPIFFE ID URI does not start with expected scheme. Expected prefix: 'spiffe://',"
+                  + " Actual URI: '%s'",
+              spiffeId));
+    }
     java.net.URI uri = new java.net.URI(spiffeId);
-    return extractTrustDomainFromHost(uri.getHost());
+    String host = uri.getHost();
+    if (host == null || host.isEmpty()) {
+      throw new IllegalArgumentException(
+          String.format(
+              "SPIFFE ID URI does not contain a valid host/trust domain. Actual SPIFFE ID: '%s'",
+              spiffeId));
+    }
+    return extractTrustDomainFromHost(host);
   }
 
-  private static Optional<String> extractTrustDomainFromHost(String host) {
-    if (host != null && host.startsWith("tca.")) {
-      return Optional.of(host);
+  private static String extractTrustDomainFromHost(String host) {
+    if (!host.startsWith("tca.")) {
+      throw new IllegalArgumentException(
+          String.format(
+              "SPIFFE ID trust domain does not start with expected prefix. Expected prefix: 'tca.',"
+                  + " Actual host/trust domain: '%s'",
+              host));
     }
-    return Optional.empty();
+    return host;
   }
 }

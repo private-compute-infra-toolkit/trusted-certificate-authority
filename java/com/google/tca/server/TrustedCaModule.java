@@ -36,7 +36,6 @@ import com.google.tca.adapters.S3FileFetcher;
 import com.google.tca.adapters.SystemMetrics;
 import com.google.tca.adapters.certsigning.CertificateModifiersCreatorImpl;
 import com.google.tca.adapters.endorsement.JsonIntotoEndorsementMetadataProvider;
-import com.google.tca.adapters.oidc.AudienceHostname;
 import com.google.tca.adapters.oidc.OidcAudienceBindingValidator;
 import com.google.tca.adapters.oidc.OidcDiscoveryFetcher;
 import com.google.tca.adapters.oidc.OidcJwksKeyFetcher;
@@ -99,7 +98,6 @@ public class TrustedCaModule extends AbstractModule {
     bind(FileFetcher.class).to(S3FileFetcher.class);
     bind(Metrics.class).to(SystemMetrics.class);
     bind(AudienceBindingValidator.class).to(OidcAudienceBindingValidator.class);
-    bind(String.class).annotatedWith(AudienceHostname.class).toInstance("tca.pcit.goog");
   }
 
   @Provides

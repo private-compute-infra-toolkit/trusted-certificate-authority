@@ -16,8 +16,10 @@
 
 package com.google.tca.adapters.endorsement;
 
-import static com.google.tca.adapters.endorsement.Claim.PES_CLAIM_PUBLISHER_V1_TYPE;
+import static com.google.tca.adapters.endorsement.Claim.PES_CLAIM_PUBLISHER_LEGACY_TYPE;
+import static com.google.tca.adapters.endorsement.Claim.PES_CLAIM_PUBLISHER_TYPE;
 import static com.google.tca.adapters.endorsement.Claim.PUBLISHER_ID_KEY;
+import static com.google.tca.adapters.endorsement.Claim.WORKLOAD_CLAIM_LEGACY_TYPE;
 import static com.google.tca.adapters.endorsement.Claim.WORKLOAD_CLAIM_TYPE;
 import static com.google.tca.adapters.endorsement.Claim.WORKLOAD_ID_KEY;
 
@@ -106,7 +108,10 @@ public final class JsonIntotoEndorsementMetadataProvider implements EndorsementM
 
     List<Claim> publisherClaims =
         statement.getPredicate().getClaims().stream()
-            .filter(claim -> claim.getType().equals(PES_CLAIM_PUBLISHER_V1_TYPE))
+            .filter(
+                claim ->
+                    claim.getType().equals(PES_CLAIM_PUBLISHER_LEGACY_TYPE)
+                        || claim.getType().equals(PES_CLAIM_PUBLISHER_TYPE))
             .toList();
     if (1 != publisherClaims.size()) {
       throw new RuntimeException(
@@ -115,7 +120,10 @@ public final class JsonIntotoEndorsementMetadataProvider implements EndorsementM
 
     List<Claim> workloadClaims =
         statement.getPredicate().getClaims().stream()
-            .filter(claim -> claim.getType().equals(WORKLOAD_CLAIM_TYPE))
+            .filter(
+                claim ->
+                    claim.getType().equals(WORKLOAD_CLAIM_LEGACY_TYPE)
+                        || claim.getType().equals(WORKLOAD_CLAIM_TYPE))
             .toList();
     if (1 != workloadClaims.size()) {
       throw new RuntimeException(

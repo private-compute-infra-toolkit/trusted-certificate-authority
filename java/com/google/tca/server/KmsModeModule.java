@@ -30,7 +30,6 @@ import com.google.mbs.MeasurementBoundCertificate;
 import com.google.mbs.MeasurementBoundCertificateProvider;
 import com.google.mbs.attestationcollection.AttestationCollector;
 import com.google.tca.adapters.PolicyBucket;
-import com.google.tca.adapters.oidc.ServiceRegion;
 import com.google.tlog.TransparencyLogClient;
 import jakarta.inject.Singleton;
 import java.nio.charset.StandardCharsets;
@@ -66,7 +65,7 @@ public class KmsModeModule extends AbstractModule {
     bind(String.class)
         .annotatedWith(PolicyBucket.class)
         .toInstance(awsResourceNames.configBucketName());
-    bind(String.class).annotatedWith(ServiceRegion.class).toInstance(awsInstanceMetadata.region());
+    bind(AwsInstanceMetadata.class).toInstance(awsInstanceMetadata);
   }
 
   @Provides

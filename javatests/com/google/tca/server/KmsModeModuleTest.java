@@ -77,7 +77,12 @@ public class KmsModeModuleTest {
     String testEnv = "testenv";
     String testDomain = "testdomain";
     AwsInstanceMetadata awsInstanceMetadata =
-        new AwsInstanceMetadata("us-east-1", "123456789012", testEnv, testDomain);
+        AwsInstanceMetadata.builder()
+            .setRegion("us-east-1")
+            .setAccountId("123456789012")
+            .setEnvironment(testEnv)
+            .setDomain(testDomain)
+            .build();
     KmsArgs kmsArgs = new KmsArgs();
     KmsModeModule module = new KmsModeModule(kmsArgs, awsInstanceMetadata);
 
@@ -134,7 +139,12 @@ public class KmsModeModuleTest {
     String testEnv = "prod";
     String testDomain = "aws.pcit.goog";
     AwsInstanceMetadata awsInstanceMetadata =
-        new AwsInstanceMetadata("us-east-1", "123456789012", testEnv, testDomain);
+        AwsInstanceMetadata.builder()
+            .setRegion("us-east-1")
+            .setAccountId("123456789012")
+            .setEnvironment(testEnv)
+            .setDomain(testDomain)
+            .build();
     KmsArgs kmsArgs = new KmsArgs();
     KmsModeModule module = new KmsModeModule(kmsArgs, awsInstanceMetadata);
 

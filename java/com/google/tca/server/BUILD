@@ -20,6 +20,12 @@ java_plugin(
     deps = ["@maven//:com_google_auto_value_auto_value"],
 )
 
+java_plugin(
+    name = "auto_builder_plugin",
+    processor_class = "com.google.auto.value.processor.AutoBuilderProcessor",
+    deps = ["@maven//:com_google_auto_value_auto_value"],
+)
+
 java_library(
     name = "cmd_line_args",
     srcs = [
@@ -38,7 +44,6 @@ java_library(
 java_library(
     name = "server",
     srcs = [
-        "AwsInstanceMetadata.java",
         "AwsResourceNames.java",
         "AwsResourceNamesProvider.java",
         "ImdsClient.java",
@@ -54,6 +59,7 @@ java_library(
     visibility = ["//visibility:public"],
     deps = [
         ":cmd_line_args",
+        ":metadata",
         "//java/com/google/tca/adapters",
         "//java/com/google/tca/adapters/certsigning",
         "//java/com/google/tca/adapters/endorsement",
@@ -149,5 +155,19 @@ java_binary(
         "@pcit_mbs//java/com/google/mbs:certmanagement",
         "@pcit_mbs//java/com/google/mbs/attestationcollection/aws",
         "@pcit_mbs//java/com/google/tlog",
+    ],
+)
+
+java_library(
+    name = "metadata",
+    srcs = [
+        "AwsInstanceMetadata.java",
+    ],
+    plugins = [
+        ":auto_builder_plugin",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@maven//:com_google_auto_value_auto_value_annotations",
     ],
 )

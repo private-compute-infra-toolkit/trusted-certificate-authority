@@ -19,13 +19,11 @@ package(default_visibility = ["//visibility:public"])
 java_library(
     name = "oidc",
     srcs = [
-        "AudienceHostname.java",
         "JwksUriProvider.java",
         "OidcAudienceBindingValidator.java",
         "OidcDiscoveryFetcher.java",
         "OidcJwksKeyFetcher.java",
         "OidcJwksKeyLocator.java",
-        "ServiceRegion.java",
         "TrustDomain.java",
     ],
     runtime_deps = [
@@ -33,6 +31,7 @@ java_library(
     ],
     deps = [
         "//java/com/google/tca/domain",
+        "//java/com/google/tca/server:metadata",
         "@maven//:com_fasterxml_jackson_core_jackson_databind",
         "@maven//:com_github_ben_manes_caffeine_caffeine",
         "@maven//:com_google_flogger_flogger",

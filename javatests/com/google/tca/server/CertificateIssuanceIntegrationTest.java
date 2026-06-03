@@ -96,6 +96,8 @@ public class CertificateIssuanceIntegrationTest {
   private TcaServer tcaServer;
   private ManagedChannel channel;
   private TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub blockingStub;
+  private TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub baseBlockingStub;
+  private PrivateKey jwtPrivateKey;
 
   // Helper class to return both CSR and KeyPair from the helper method.
   private static class TestCsrAndKeyPair {
@@ -137,7 +139,7 @@ public class CertificateIssuanceIntegrationTest {
             certAndKey.certificate(), certAndKey.privateKey(), dummyToken);
 
     KeyPair jwtKeyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-    PrivateKey jwtPrivateKey = jwtKeyPair.getPrivate();
+    this.jwtPrivateKey = jwtKeyPair.getPrivate();
     PublicKey jwtPublicKey = jwtKeyPair.getPublic();
 
     fileFetcherStub =
@@ -153,7 +155,7 @@ public class CertificateIssuanceIntegrationTest {
 
     injector =
         Guice.createInjector(
-            Modules.override(new TrustedCaModule(), new LocalModeModule(localArgs))
+            Modules.override(new TrustedCaModule())
                 .with(
                     new AbstractModule() {
                       @Override
@@ -172,6 +174,14 @@ public class CertificateIssuanceIntegrationTest {
                                 io.jsonwebtoken.Locator<java.security.Key>>() {})
                             .annotatedWith(JwtAuth.class)
                             .toInstance(header -> jwtPublicKey);
+                        bind(AwsInstanceMetadata.class)
+                            .toInstance(
+                                AwsInstanceMetadata.builder()
+                                    .setRegion("local")
+                                    .setAccountId("dummy_account")
+                                    .setEnvironment("local")
+                                    .setDomain("pcit.goog")
+                                    .build());
                       }
                     }));
 
@@ -187,15 +197,30 @@ public class CertificateIssuanceIntegrationTest {
         grpcCleanup.register(
             ManagedChannelBuilder.forAddress("localhost", tcaServer.port()).usePlaintext().build());
 
-    blockingStub = TrustedCertificateAuthorityGrpc.newBlockingStub(channel);
+    baseBlockingStub = TrustedCertificateAuthorityGrpc.newBlockingStub(channel);
 
     Metadata metadata = new Metadata();
     metadata.put(
         Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER),
-        "Bearer " + RequestUtils.createJwtToken(jwtPrivateKey));
+        "Bearer " + RequestUtils.createJwtToken(this.jwtPrivateKey));
 
     blockingStub =
-        blockingStub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
+        baseBlockingStub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
+  }
+
+  private TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub withTokenForCsr(
+      PublicKey csrPublicKey) throws Exception {
+    java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+    byte[] hash = md.digest(csrPublicKey.getEncoded());
+    String digest = com.google.common.io.BaseEncoding.base16().lowerCase().encode(hash);
+    String audience = "https://tca.local.test/v1/certificates:issue?pubkey_sha256=" + digest;
+
+    Metadata metadata = new Metadata();
+    metadata.put(
+        Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER),
+        "Bearer " + RequestUtils.createJwtToken(this.jwtPrivateKey, audience));
+
+    return baseBlockingStub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
   }
 
   @After
@@ -339,7 +364,8 @@ public class CertificateIssuanceIntegrationTest {
             .setCertificateSigningRequest(ByteString.copyFrom(csr.getEncoded()))
             .build();
 
-    IssueCertificateResponse response = blockingStub.issueCertificate(request);
+    IssueCertificateResponse response =
+        withTokenForCsr(testCsrAndKeyPair.keyPair.getPublic()).issueCertificate(request);
 
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
 
@@ -418,7 +444,8 @@ public class CertificateIssuanceIntegrationTest {
             .setCertificateSigningRequest(ByteString.copyFrom(csr.getEncoded()))
             .build();
 
-    IssueCertificateResponse response = blockingStub.issueCertificate(request);
+    IssueCertificateResponse response =
+        withTokenForCsr(testCsrAndKeyPair.keyPair.getPublic()).issueCertificate(request);
 
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
 
@@ -497,7 +524,8 @@ public class CertificateIssuanceIntegrationTest {
             .setCertificateSigningRequest(ByteString.copyFrom(csr.getEncoded()))
             .build();
 
-    IssueCertificateResponse response = blockingStub.issueCertificate(request);
+    IssueCertificateResponse response =
+        withTokenForCsr(testCsrAndKeyPair.keyPair.getPublic()).issueCertificate(request);
 
     assertEquals(2, response.getSignedCertificatesCount());
   }
@@ -524,8 +552,10 @@ public class CertificateIssuanceIntegrationTest {
             .setCertificateSigningRequest(ByteString.copyFrom(csr.getEncoded()))
             .build();
 
+    TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub authStub =
+        withTokenForCsr(testCsrAndKeyPair.keyPair.getPublic());
     StatusRuntimeException e =
-        assertThrows(StatusRuntimeException.class, () -> blockingStub.issueCertificate(request));
+        assertThrows(StatusRuntimeException.class, () -> authStub.issueCertificate(request));
 
     assertThat(e.getStatus().getDescription())
         .contains("Missing required creator property 'notAfter'");
@@ -552,8 +582,10 @@ public class CertificateIssuanceIntegrationTest {
             .setCertificateSigningRequest(ByteString.copyFrom(csr.getEncoded()))
             .build();
 
+    TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub authStub =
+        withTokenForCsr(testCsrAndKeyPair.keyPair.getPublic());
     StatusRuntimeException e =
-        assertThrows(StatusRuntimeException.class, () -> blockingStub.issueCertificate(request));
+        assertThrows(StatusRuntimeException.class, () -> authStub.issueCertificate(request));
 
     assertThat(e.getStatus().getDescription())
         .contains("Endorsement does not contain correct validity format");

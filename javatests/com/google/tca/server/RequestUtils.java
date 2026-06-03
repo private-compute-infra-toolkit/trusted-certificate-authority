@@ -33,8 +33,13 @@ public class RequestUtils {
   String notAfter = "3027-03-05T10:00:00.000000Z";
 
   public static String createJwtToken(PrivateKey privateKey) {
+    String defaultAudience = "jwt-token-test-aud";
+    return createJwtToken(privateKey, defaultAudience);
+  }
+
+  public static String createJwtToken(PrivateKey privateKey, String audience) {
     return Jwts.builder()
-        .setAudience("jwt-token-test-aud")
+        .setAudience(audience)
         .claim("azp", "jwt-token-test-azp")
         .claim("email", "example@developer.gserviceaccount.com")
         .claim("email_verified", true)
@@ -89,13 +94,13 @@ public class RequestUtils {
                 },
                 "claims": [
                   {
-                    "type": "https://github.com/pcit/pes/docs/claims/v1/publisher.md",
+                    "type": "https://github.com/private-compute-infra-toolkit/public-endorsement-service/blob/main/docs/claims/publisher.md",
                     "annotations": {
                       "publisher_id": "default_publisher_id@example.com"
                     }
                   },
                   {
-                    "type": "https://github.com/pcit/pes/docs/claims/v1/workload.md",
+                    "type": "https://github.com/private-compute-infra-toolkit/public-endorsement-service/blob/main/docs/claims/workload.md",
                     "annotations": {
                       "workload_id": "default_workload_id",
                       "version": "1"
@@ -134,13 +139,13 @@ public class RequestUtils {
                 },
                 "claims": [
                   {
-                    "type": "https://github.com/pcit/pes/docs/claims/v1/publisher.md",
+                    "type": "https://github.com/private-compute-infra-toolkit/public-endorsement-service/blob/main/docs/claims/publisher.md",
                     "annotations": {
                       "publisher_id": "default_publisher_id@example.com"
                     }
                   },
                   {
-                    "type": "https://github.com/pcit/pes/docs/claims/v1/workload.md",
+                    "type": "https://github.com/private-compute-infra-toolkit/public-endorsement-service/blob/main/docs/claims/workload.md",
                     "annotations": {
                       "workload_id": "default_workload_id",
                       "version": "1"
@@ -206,13 +211,13 @@ public class RequestUtils {
             },
             "claims": [
               {
-                "type": "https://github.com/pcit/pes/docs/claims/v1/publisher.md",
+                "type": "https://github.com/private-compute-infra-toolkit/public-endorsement-service/blob/main/docs/claims/publisher.md",
                 "annotations": {
                   "publisher_id": "default_publisher_id@example.com"
                 }
               },
               {
-                "type": "https://github.com/pcit/pes/docs/claims/v1/workload.md",
+                "type": "https://github.com/private-compute-infra-toolkit/public-endorsement-service/blob/main/docs/claims/workload.md",
                 "annotations": {
                   "workload_id": "default_workload_id",
                   "version": "1"

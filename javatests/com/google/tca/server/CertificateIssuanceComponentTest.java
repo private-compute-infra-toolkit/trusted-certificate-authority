@@ -23,6 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.google.common.io.BaseEncoding;
 import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
@@ -47,6 +48,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.cert.X509Certificate;
@@ -108,7 +110,7 @@ public class CertificateIssuanceComponentTest {
 
     Injector injector =
         Guice.createInjector(
-            Modules.override(new TrustedCaModule(), new LocalModeModule(localArgs))
+            Modules.override(new TrustedCaModule())
                 .with(
                     new AbstractModule() {
                       @Override
@@ -123,7 +125,8 @@ public class CertificateIssuanceComponentTest {
                           provideVerifiers() {
                         return Collections.singletonMap(OakAttestationEvidence.class, mockVerifier);
                       }
-                    }));
+                    }),
+            new LocalModeModule(localArgs));
 
     trustedCaService = injector.getInstance(TrustedCaService.class);
     rootCertificate = injector.getInstance(X509Certificate.class);
@@ -155,9 +158,16 @@ public class CertificateIssuanceComponentTest {
             .setCertificateSigningRequest(ByteString.copyFrom(csr.getEncoded()))
             .build();
 
+    MessageDigest md = MessageDigest.getInstance("SHA-256");
+    byte[] hash = md.digest(keyPair.getPublic().getEncoded());
+    String digest = BaseEncoding.base16().lowerCase().encode(hash);
+    String expectedAudience =
+        "https://tca.local.test/v1/certificates:issue?pubkey_sha256=" + digest;
+
     List<X509Certificate> issuedCerts =
         trustedCaService.issueCertificate(
-            request, new CallerIdentity("test-issuer", "test-subject", java.util.Set.of()));
+            request,
+            new CallerIdentity("test-issuer", "test-subject", java.util.Set.of(expectedAudience)));
 
     assertEquals(2, issuedCerts.size());
 
