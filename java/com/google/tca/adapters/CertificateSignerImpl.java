@@ -16,6 +16,7 @@
 
 package com.google.tca.adapters;
 
+import com.google.common.flogger.FluentLogger;
 import com.google.tca.domain.CertificateModifier;
 import com.google.tca.domain.CertificateSigner;
 import com.google.tca.domain.TimeProvider;
@@ -48,6 +49,7 @@ import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 
 @Singleton
 public class CertificateSignerImpl implements CertificateSigner {
+  private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
   static {
     Security.addProvider(new BouncyCastleProvider());
@@ -85,7 +87,7 @@ public class CertificateSignerImpl implements CertificateSigner {
               new JcaPEMKeyConverter().getPublicKey(csr.getSubjectPublicKeyInfo()));
 
       JcaX509ExtensionUtils extUtils = new JcaX509ExtensionUtils();
-      AuthorityKeyIdentifier aki = extUtils.createAuthorityKeyIdentifier(issuerCert.getPublicKey());
+      AuthorityKeyIdentifier aki = createAuthorityKeyIdentifier(extUtils, issuerCert);
       SubjectKeyIdentifier ski = extUtils.createSubjectKeyIdentifier(csr.getSubjectPublicKeyInfo());
 
       certBuilder.addExtension(Extension.authorityKeyIdentifier, false, aki);
@@ -99,5 +101,16 @@ public class CertificateSignerImpl implements CertificateSigner {
     } catch (OperatorCreationException | GeneralSecurityException e) {
       throw new CertificateException(e);
     }
+  }
+
+  private AuthorityKeyIdentifier createAuthorityKeyIdentifier(
+      JcaX509ExtensionUtils extUtils, X509Certificate issuerCert) throws CertificateException {
+    if (issuerCert.getExtensionValue(Extension.subjectKeyIdentifier.getId()) != null) {
+      return extUtils.createAuthorityKeyIdentifier(issuerCert);
+    }
+    logger.atWarning().log(
+        "Issuer certificate is missing Subject Key Identifier (SKI), which is required by"
+            + " RFC 5280. Falling back to public key hashing.");
+    return extUtils.createAuthorityKeyIdentifier(issuerCert.getPublicKey());
   }
 }

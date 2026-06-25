@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.4.0 (2026-06-25)
+
+
+### Dependencies
+
+* **deps:** Update DevKit to release-3.9.0
+
+
+### Features
+
+* Add metrics-exporter configuration
+* Cache policy files fetched from s3 for 5 minutes
+* Disable prometheus relabeling
+* Propagate GOB commit and RAPID pipeline URLs to AMI tags
+* Update container-tools
+* Update MBS. Set SKI in root cert. Set cache-control on backup
+* Use issuer cert's SKI as issued cert's AKI
+
+
+### Bug Fixes
+
+* map IncorrectEndorsementFormatException to INVALID_ARGUMENT
+
 ## 0.3.0 (2026-06-03)
 
 

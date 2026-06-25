@@ -30,6 +30,7 @@ import com.google.inject.util.Modules;
 import com.google.mbs.MbsCertificateFactory;
 import com.google.mbs.MeasurementBoundCertificate;
 import com.google.mbs.attestationcollection.AttestationToken;
+import com.google.oak.attestation.v1.Endorsements;
 import com.google.oak.attestation.v1.Evidence;
 import com.google.protobuf.ByteString;
 import com.google.tca.domain.FileFetcher;
@@ -343,6 +344,55 @@ public class CertificateIssuanceIntegrationTest {
         assertThrows(StatusRuntimeException.class, () -> blockingStub.issueCertificate(request));
 
     assertEquals(Status.INVALID_ARGUMENT.getCode(), e.getStatus().getCode());
+  }
+
+  @Test
+  public void issueCertificate_invalidCsr_returnsInvalidArgument() throws Exception {
+    when(verifierProvider.getVerifier(any(AttestationEvidence.class)))
+        .thenReturn(Optional.of(verifier));
+    when(verifier.verify(
+            any(AttestationEvidence.class), any(PublicKey.class), any(ReferenceValues.class)))
+        .thenReturn(true);
+
+    IssueCertificateRequest request =
+        IssueCertificateRequest.newBuilder()
+            .setAttestationEvidence(createGcpEvidence("token"))
+            .setCertificateSigningRequest(ByteString.copyFromUtf8("invalid_csr"))
+            .build();
+
+    StatusRuntimeException e =
+        assertThrows(StatusRuntimeException.class, () -> blockingStub.issueCertificate(request));
+
+    assertEquals(Status.INVALID_ARGUMENT.getCode(), e.getStatus().getCode());
+    assertEquals("Invalid CSR", e.getStatus().getDescription());
+  }
+
+  @Test
+  public void issueCertificate_incorrectEndorsementFormat_returnsInvalidArgument()
+      throws Exception {
+    TestCsrAndKeyPair testCsrAndKeyPair = createTestCsr();
+    IssueCertificateRequest request =
+        IssueCertificateRequest.newBuilder()
+            .setAttestationEvidence(
+                com.google.tca.v1.AttestationEvidence.newBuilder()
+                    .setOakAttestationEvidence(
+                        com.google.tca.v1.OakAttestationEvidence.newBuilder()
+                            .setEndorsements(Endorsements.getDefaultInstance())
+                            .setEvidence(Evidence.getDefaultInstance())
+                            .setSignedPublicKey(ByteString.copyFromUtf8(""))
+                            .build())
+                    .build())
+            .setCertificateSigningRequest(ByteString.copyFrom(testCsrAndKeyPair.csr.getEncoded()))
+            .build();
+
+    TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub authStub =
+        withTokenForCsr(testCsrAndKeyPair.keyPair.getPublic());
+    StatusRuntimeException e =
+        assertThrows(StatusRuntimeException.class, () -> authStub.issueCertificate(request));
+
+    assertEquals(Status.INVALID_ARGUMENT.getCode(), e.getStatus().getCode());
+    assertEquals(
+        "There should be exactly 1 container endorsement, got 0", e.getStatus().getDescription());
   }
 
   @Test

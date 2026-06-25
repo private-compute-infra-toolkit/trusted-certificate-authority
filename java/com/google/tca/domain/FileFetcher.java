@@ -17,7 +17,8 @@
 package com.google.tca.domain;
 
 import com.google.protobuf.ByteString;
+import java.util.Optional;
 
 public interface FileFetcher {
-  ByteString fetchFile(String path);
+  Optional<ByteString> fetchFile(String path);
 }

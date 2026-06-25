@@ -1,0 +1,35 @@
+{
+  "agent": {
+    "metrics_collection_interval": 60,
+    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log"
+  },
+  "logs": {
+    "metrics_collected": {
+      "prometheus": {
+        "log_group_name": "tca-metrics-logs",
+        "prometheus_config_path": "/opt/aws/amazon-cloudwatch-agent/etc/prometheus.yaml",
+        "emf_processor": {
+          "metric_namespace": "TCA",
+          "metric_declaration": [
+            {
+              "source_labels": ["job"],
+              "label_matcher": "^tca$",
+              "dimensions": [["method", "status"]],
+              "metric_selectors": [
+                "^tca_server_total_duration_seconds_count$",
+                "^tca_server_total_duration_seconds_sum$",
+                "^tca_server_requests_total$"
+              ]
+            },
+            {
+              "source_labels": ["job"],
+              "label_matcher": "^tca$",
+              "dimensions": [["status"]],
+              "metric_selectors": ["^tca_authorizationStatus_total$", "^tca_processingStatus_total$"]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

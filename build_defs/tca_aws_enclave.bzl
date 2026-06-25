@@ -29,6 +29,7 @@ def tca_aws_eif_and_ami(
         jar_file = "/server_main_deploy.jar",
         jar_path = "//java/com/google/tca/server:server_main_deploy.jar",
         service_name = "tca",
+        user_rpms = [],
         **kwargs):
     """Generates a TCA-specific AWS EIF and AMI with standard defaults.
 
@@ -58,6 +59,10 @@ def tca_aws_eif_and_ami(
         "-Dflogger.backend_factory=com.google.common.flogger.backend.slf4j.Slf4jBackendFactory",
     ]
 
+    default_user_rpms = [
+        "//build_defs/aws:tca_metrics_rpm",
+    ]
+
     aws_eif_and_ami(
         name = name,
         additional_container_tars = default_additional_container_tars + extra_container_tars,
@@ -71,5 +76,6 @@ def tca_aws_eif_and_ami(
         service_name = service_name,
         subnet_id = subnet_id,
         uninstall_ssh_server = uninstall_ssh_server,
+        user_rpms = default_user_rpms + user_rpms,
         **kwargs
     )

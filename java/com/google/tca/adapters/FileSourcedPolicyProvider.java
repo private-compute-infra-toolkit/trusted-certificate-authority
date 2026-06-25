@@ -43,16 +43,21 @@ public class FileSourcedPolicyProvider implements PolicyProvider {
   public Optional<Policy> getPolicy(
       CallerIdentity identity, String publisherId, String workloadId) {
     String clientId = identity.getClientId();
-    ByteString rawFile;
-
+    Optional<ByteString> rawFileOpt;
     try {
-      rawFile = fileFetcher.fetchFile(clientId);
+      rawFileOpt = fileFetcher.fetchFile(clientId);
     } catch (FileLoadException e) {
       logger.atWarning().log(
           "Failed to get file for [%s, %s], exception: %s",
           identity.issuer(), identity.subject(), e);
       return Optional.empty();
     }
+
+    if (rawFileOpt.isEmpty()) {
+      logger.atWarning().log("File not found for [%s, %s]", identity.issuer(), identity.subject());
+      return Optional.empty();
+    }
+    ByteString rawFile = rawFileOpt.get();
 
     com.google.tca.policy.v1.Policies.Builder builder =
         com.google.tca.policy.v1.Policies.newBuilder();

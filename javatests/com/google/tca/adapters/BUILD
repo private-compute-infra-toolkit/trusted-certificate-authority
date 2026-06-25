@@ -115,3 +115,36 @@ java_test(
         "@maven//:junit_junit",
     ],
 )
+
+java_test(
+    name = "S3FileFetcherTest",
+    size = "small",
+    srcs = ["S3FileFetcherTest.java"],
+    test_class = "com.google.tca.adapters.S3FileFetcherTest",
+    deps = [
+        "//java/com/google/tca/adapters",
+        "//java/com/google/tca/domain/policy",
+        "@com_google_protobuf//java/core",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
+        "@maven//:org_mockito_mockito_core",
+        "@maven//:software_amazon_awssdk_s3",
+        "@maven//:software_amazon_awssdk_sdk_core",
+    ],
+)
+
+java_test(
+    name = "CachedFileFetcherTest",
+    size = "small",
+    srcs = ["CachedFileFetcherTest.java"],
+    test_class = "com.google.tca.adapters.CachedFileFetcherTest",
+    deps = [
+        "//java/com/google/tca/adapters",
+        "//java/com/google/tca/domain",
+        "//java/com/google/tca/domain/policy",
+        "@com_google_protobuf//java/core",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
+        "@maven//:org_mockito_mockito_core",
+    ],
+)

@@ -16,7 +16,7 @@
 
 package com.google.tca.domain.attestation;
 
-public class IncorrectEndorsementFormatException extends RuntimeException {
+public class IncorrectEndorsementFormatException extends IllegalArgumentException {
   public IncorrectEndorsementFormatException(String message) {
     super(message);
   }

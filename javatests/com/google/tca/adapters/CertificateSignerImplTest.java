@@ -44,8 +44,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import javax.security.auth.x500.X500Principal;
+import org.bouncycastle.asn1.ASN1OctetString;
 import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.asn1.x509.AuthorityKeyIdentifier;
+import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
@@ -87,6 +92,12 @@ public class CertificateSignerImplTest {
             java.util.Date.from(testTime.plus(Duration.ofDays(10))),
             new X500Name("CN=Issuer CA"),
             issuerKeyPair.getPublic());
+
+    JcaX509ExtensionUtils extUtils = new JcaX509ExtensionUtils();
+    certBuilder.addExtension(
+        Extension.subjectKeyIdentifier,
+        false,
+        extUtils.createSubjectKeyIdentifier(issuerKeyPair.getPublic()));
 
     ContentSigner signer =
         new JcaContentSignerBuilder("SHA256withRSA").build(issuerKeyPair.getPrivate());
@@ -185,6 +196,91 @@ public class CertificateSignerImplTest {
     assertThat(san.get(1))
         .isEqualTo(
             "spiffe://example.org/operator/test-operator/publisher/example.com/test-publisher/workload/test-app");
+  }
+
+  @Test
+  public void signCsr_issuerHasSki_usesIssuerSkiForAki() throws Exception {
+    KeyPair clientKeyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    JcaPKCS10CertificationRequestBuilder p10Builder =
+        new JcaPKCS10CertificationRequestBuilder(
+            new X500Name("CN=TestCA"), clientKeyPair.getPublic());
+    ContentSigner clientSigner =
+        new JcaContentSignerBuilder("SHA256withRSA").build(clientKeyPair.getPrivate());
+    PKCS10CertificationRequest csr = p10Builder.build(clientSigner);
+
+    X509Certificate signedCert =
+        certificateSigner.signCsr(
+            csr.getEncoded(),
+            issuerCert,
+            issuerKeyPair.getPrivate(),
+            testTime,
+            testTime.plus(Duration.ofHours(1)),
+            List.of(),
+            new X500Principal("CN=TestCA"));
+
+    byte[] akiExtensionValue =
+        signedCert.getExtensionValue(Extension.authorityKeyIdentifier.getId());
+    assertThat(akiExtensionValue).isNotNull();
+    AuthorityKeyIdentifier aki =
+        AuthorityKeyIdentifier.getInstance(
+            ASN1OctetString.getInstance(akiExtensionValue).getOctets());
+    byte[] keyIdentifier = aki.getKeyIdentifier();
+
+    byte[] issuerSkiValue = issuerCert.getExtensionValue(Extension.subjectKeyIdentifier.getId());
+    byte[] expectedKeyIdentifier =
+        SubjectKeyIdentifier.getInstance(ASN1OctetString.getInstance(issuerSkiValue).getOctets())
+            .getKeyIdentifier();
+
+    assertThat(keyIdentifier).isEqualTo(expectedKeyIdentifier);
+  }
+
+  @Test
+  public void signCsr_issuerMissingSki_fallsBackToPublicKeyHash() throws Exception {
+    KeyPair clientKeyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    JcaPKCS10CertificationRequestBuilder p10Builder =
+        new JcaPKCS10CertificationRequestBuilder(
+            new X500Name("CN=TestCA"), clientKeyPair.getPublic());
+    ContentSigner clientSigner =
+        new JcaContentSignerBuilder("SHA256withRSA").build(clientKeyPair.getPrivate());
+    PKCS10CertificationRequest csr = p10Builder.build(clientSigner);
+
+    JcaX509v3CertificateBuilder certBuilder =
+        new JcaX509v3CertificateBuilder(
+            new X500Name("CN=Issuer CA"),
+            BigInteger.ONE,
+            java.util.Date.from(testTime.minus(Duration.ofDays(1))),
+            java.util.Date.from(testTime.plus(Duration.ofDays(10))),
+            new X500Name("CN=Issuer CA"),
+            issuerKeyPair.getPublic());
+    ContentSigner signer =
+        new JcaContentSignerBuilder("SHA256withRSA").build(issuerKeyPair.getPrivate());
+    X509Certificate issuerCertWithoutSki =
+        new JcaX509CertificateConverter().getCertificate(certBuilder.build(signer));
+
+    X509Certificate signedCert =
+        certificateSigner.signCsr(
+            csr.getEncoded(),
+            issuerCertWithoutSki,
+            issuerKeyPair.getPrivate(),
+            testTime,
+            testTime.plus(Duration.ofHours(1)),
+            List.of(),
+            new X500Principal("CN=TestCA"));
+
+    byte[] akiExtensionValue =
+        signedCert.getExtensionValue(Extension.authorityKeyIdentifier.getId());
+    assertThat(akiExtensionValue).isNotNull();
+    AuthorityKeyIdentifier aki =
+        AuthorityKeyIdentifier.getInstance(
+            ASN1OctetString.getInstance(akiExtensionValue).getOctets());
+    byte[] keyIdentifier = aki.getKeyIdentifier();
+
+    byte[] expectedKeyIdentifier =
+        new JcaX509ExtensionUtils()
+            .createAuthorityKeyIdentifier(issuerKeyPair.getPublic())
+            .getKeyIdentifier();
+
+    assertThat(keyIdentifier).isEqualTo(expectedKeyIdentifier);
   }
 
   private SubjectAlternativeNameModifier getSubjectAlternativeNameModifier() {

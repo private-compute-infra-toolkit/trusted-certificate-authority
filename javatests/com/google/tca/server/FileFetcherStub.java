@@ -19,6 +19,7 @@ package com.google.tca.server;
 import com.google.common.flogger.FluentLogger;
 import com.google.protobuf.ByteString;
 import com.google.tca.domain.FileFetcher;
+import java.util.Optional;
 
 public class FileFetcherStub implements FileFetcher {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
@@ -33,11 +34,11 @@ public class FileFetcherStub implements FileFetcher {
   }
 
   @Override
-  public ByteString fetchFile(String path) {
+  public Optional<ByteString> fetchFile(String path) {
     logger.atInfo().log(
         "Using FileFetcher::fetchFile stub with argument: %s and returning hardcoded valid policy"
             + " response",
         path);
-    return content;
+    return Optional.ofNullable(content);
   }
 }

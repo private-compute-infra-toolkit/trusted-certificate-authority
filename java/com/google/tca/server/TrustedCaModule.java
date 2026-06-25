@@ -26,12 +26,14 @@ import com.google.mbs.MeasurementBoundCertificate;
 import com.google.mbs.attestationcollection.aws.AwsAttestationModule;
 import com.google.tca.adapters.AttestationVerifierProviderImpl;
 import com.google.tca.adapters.AwsAttestationEvidence;
+import com.google.tca.adapters.CachedFileFetcher;
 import com.google.tca.adapters.CertificateSignerImpl;
 import com.google.tca.adapters.DefaultTimeProvider;
 import com.google.tca.adapters.FileSourcedPolicyProvider;
 import com.google.tca.adapters.GcpAttestationEvidence;
 import com.google.tca.adapters.KeyDecoderImpl;
 import com.google.tca.adapters.OakAttestationEvidence;
+import com.google.tca.adapters.PolicyBucket;
 import com.google.tca.adapters.S3FileFetcher;
 import com.google.tca.adapters.SystemMetrics;
 import com.google.tca.adapters.certsigning.CertificateModifiersCreatorImpl;
@@ -73,6 +75,7 @@ import java.security.cert.X509Certificate;
 import java.time.InstantSource;
 import java.util.Map;
 import java.util.Optional;
+import software.amazon.awssdk.services.s3.S3Client;
 
 /** Guice module for the TCA service. */
 public class TrustedCaModule extends AbstractModule {
@@ -95,9 +98,15 @@ public class TrustedCaModule extends AbstractModule {
     bind(PolicyProvider.class).to(FileSourcedPolicyProvider.class);
     bind(EndorsementMetadataProvider.class).to(JsonIntotoEndorsementMetadataProvider.class);
     bind(CertificateModifiersCreator.class).to(CertificateModifiersCreatorImpl.class);
-    bind(FileFetcher.class).to(S3FileFetcher.class);
     bind(Metrics.class).to(SystemMetrics.class);
     bind(AudienceBindingValidator.class).to(OidcAudienceBindingValidator.class);
+  }
+
+  @Provides
+  @Singleton
+  public FileFetcher provideFileFetcher(
+      S3Client s3Client, @PolicyBucket String bucket, InstantSource instantSource) {
+    return new CachedFileFetcher(new S3FileFetcher(s3Client, bucket), instantSource);
   }
 
   @Provides

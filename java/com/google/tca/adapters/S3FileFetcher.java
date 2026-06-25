@@ -20,35 +20,33 @@ import com.google.common.flogger.FluentLogger;
 import com.google.protobuf.ByteString;
 import com.google.tca.domain.FileFetcher;
 import com.google.tca.domain.policy.FileLoadException;
-import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
+import java.util.Optional;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 
-@Singleton
 public class S3FileFetcher implements FileFetcher {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
   private final S3Client s3Client;
   private final String bucket;
 
-  @Inject
-  public S3FileFetcher(S3Client s3Client, @PolicyBucket String bucket) {
+  public S3FileFetcher(S3Client s3Client, String bucket) {
     this.s3Client = s3Client;
     this.bucket = bucket;
   }
 
-  public ByteString fetchFile(String key) throws FileLoadException {
-    ByteString bytes = loadFileFromS3(key);
-    logger.atInfo().log("Successfully fetched file from S3 bucket: %s", key);
-    return bytes;
-  }
-
-  private ByteString loadFileFromS3(String key) throws FileLoadException {
+  @Override
+  public Optional<ByteString> fetchFile(String key) throws FileLoadException {
     try (ResponseInputStream<GetObjectResponse> fetchedObject =
         s3Client.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build())) {
-      return ByteString.readFrom(fetchedObject);
+      ByteString bytes = ByteString.readFrom(fetchedObject);
+      logger.atInfo().log("Successfully fetched file from S3 bucket: %s", key);
+      return Optional.of(bytes);
+    } catch (NoSuchKeyException e) {
+      logger.atInfo().log("File %s not found in S3 bucket %s (NoSuchKeyException).", key, bucket);
+      return Optional.empty();
     } catch (Exception e) {
       throw new FileLoadException("Failed to load file " + key + " from S3 bucket: " + bucket, e);
     }
