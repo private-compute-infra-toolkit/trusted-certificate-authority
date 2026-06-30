@@ -21,6 +21,9 @@ import static org.junit.Assert.assertThrows;
 import static org.mockito.AdditionalMatchers.aryEq;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.io.BaseEncoding;
@@ -31,6 +34,7 @@ import com.google.tca.domain.attestation.AttestationVerifierProvider;
 import com.google.tca.domain.attestation.EndorsementAnnotations;
 import com.google.tca.domain.attestation.Validity;
 import com.google.tca.domain.metric.Metrics;
+import com.google.tca.domain.metric.ProcessingStatus;
 import com.google.tca.domain.policy.Policy;
 import com.google.tca.domain.policy.ReferenceValues;
 import com.google.tca.domain.policy.ReferenceValuesType;
@@ -63,7 +67,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 @RunWith(JUnit4.class)
-public class TrustedCaServiceTest {
+public class TransparentCaServiceTest {
 
   @Mock private X509Certificate mockRootCertificate;
   @Mock private X509Certificate mockChildCertificate;
@@ -82,13 +86,13 @@ public class TrustedCaServiceTest {
 
   final Instant testTime = Instant.parse("2026-06-17T16:14:30.513000Z");
 
-  private TrustedCaService trustedCaService;
+  private TransparentCaService transparentCaService;
 
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
-    trustedCaService =
-        new TrustedCaService(
+    transparentCaService =
+        new TransparentCaService(
             mockRootCertificate,
             mockPrivateKey,
             mockVerifierProvider,
@@ -125,8 +129,8 @@ public class TrustedCaServiceTest {
     when(mockTimeProvider.now()).thenReturn(testTime);
     when(mockCertificateModifiersCreator.create(any())).thenReturn(List.of());
 
-    TrustedCaService serviceWithRealCrypto =
-        new TrustedCaService(
+    TransparentCaService serviceWithRealCrypto =
+        new TransparentCaService(
             mockRootCertificate,
             mockPrivateKey,
             mockVerifierProvider,
@@ -155,6 +159,7 @@ public class TrustedCaServiceTest {
     assertEquals(2, signedCerts.size());
     assertEquals(signedCerts.get(0), mockChildCertificate);
     assertEquals(signedCerts.get(1), mockRootCertificate);
+    verify(mockMetrics).incrementCertificateIssuanceCounter("issuer/subject");
   }
 
   @Test
@@ -194,7 +199,7 @@ public class TrustedCaServiceTest {
     // Identity has binding for a different key
     CallerIdentity identity = createIdentityWithBinding(differentKeyPair.getPublic());
 
-    List<X509Certificate> signedCerts = trustedCaService.issueCertificate(request, identity);
+    List<X509Certificate> signedCerts = transparentCaService.issueCertificate(request, identity);
     assertEquals(2, signedCerts.size());
     assertEquals(signedCerts.get(0), mockChildCertificate);
     assertEquals(signedCerts.get(1), mockRootCertificate);
@@ -234,7 +239,7 @@ public class TrustedCaServiceTest {
         .thenReturn(mockChildCertificate);
 
     List<X509Certificate> signedCerts =
-        trustedCaService.issueCertificate(
+        transparentCaService.issueCertificate(
             request, new CallerIdentity("issuer", "subject", Set.of()));
     assertEquals(2, signedCerts.size());
     assertEquals(signedCerts.get(0), mockChildCertificate);
@@ -261,9 +266,10 @@ public class TrustedCaServiceTest {
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                trustedCaService.issueCertificate(
+                transparentCaService.issueCertificate(
                     request, new CallerIdentity("test-issuer", "test-subject", Set.of())));
     assertEquals("Unsupported attestation platform", e.getMessage());
+    verify(mockMetrics, never()).incrementCertificateIssuanceCounter(any());
   }
 
   @Test
@@ -288,9 +294,10 @@ public class TrustedCaServiceTest {
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                trustedCaService.issueCertificate(
+                transparentCaService.issueCertificate(
                     request, new CallerIdentity("test-issuer", "test-subject", Set.of())));
     assertEquals("Attestation token is not valid", e.getMessage());
+    verify(mockMetrics, never()).incrementCertificateIssuanceCounter(any());
   }
 
   @Test
@@ -319,7 +326,7 @@ public class TrustedCaServiceTest {
         assertThrows(
             IllegalArgumentException.class,
             () ->
-                trustedCaService.issueCertificate(
+                transparentCaService.issueCertificate(
                     request, new CallerIdentity("test-issuer", "test-subject", Set.of())));
     assertEquals("Attestation token is not valid", e.getMessage());
   }
@@ -359,16 +366,19 @@ public class TrustedCaServiceTest {
   }
 
   private Policy createValidPolicy() {
-    return new Policy(
-        "test-publisher",
-        "test-app",
-        "example.com",
-        "test-operator",
-        List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)),
-        new X509CertificateAttributes(
-            Duration.ofHours(1),
-            new X509Extensions(Optional.empty(), Optional.empty()),
-            new X500NameAttributes(Map.of("2.5.4.3", "policy-subject"))));
+    return Policy.builder()
+        .setPublisherId("test-publisher")
+        .setWorkloadId("test-app")
+        .setOperatorDomain("example.com")
+        .setOperatorRole("test-operator-role")
+        .setReferenceValuesList(
+            List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)))
+        .setCertificateAttributes(
+            new X509CertificateAttributes(
+                Duration.ofHours(1),
+                new X509Extensions(Optional.empty(), Optional.empty()),
+                new X500NameAttributes(Map.of("2.5.4.3", "policy-subject"))))
+        .build();
   }
 
   private EndorsementAnnotations createValidEndorsementProperties() {
@@ -377,5 +387,74 @@ public class TrustedCaServiceTest {
 
   private Validity createValidity() {
     return new Validity(testTime.minusSeconds(100), testTime.plusSeconds(1000));
+  }
+
+  @Test
+  public void issueCertificate_invalidCsr_throwsIOExceptionAndIncrementsMetric() throws Exception {
+    CertificateIssuanceRequest request = createStubRequest(); // "foo" is invalid CSR
+
+    assertThrows(
+        java.io.IOException.class,
+        () ->
+            transparentCaService.issueCertificate(
+                request, new CallerIdentity("issuer", "subject", Set.of())));
+
+    verify(mockMetrics).incrementProcessingCounter(ProcessingStatus.INVALID_CSR);
+  }
+
+  @Test
+  public void
+      issueCertificate_audienceMismatch_throwsAudienceValidationExceptionAndIncrementsMetric()
+          throws Exception {
+    KeyPair keyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    PKCS10CertificationRequest csr = createTestCsr(keyPair);
+    CertificateIssuanceRequest request = createValidRequest(csr.getEncoded());
+
+    when(mockKeyDecoder.decodeRawPublicKey(any())).thenReturn(keyPair.getPublic());
+    doThrow(new AudienceValidationException("audience mismatch"))
+        .when(mockAudienceBindingValidator)
+        .validate(any(), any());
+
+    assertThrows(
+        AudienceValidationException.class,
+        () ->
+            transparentCaService.issueCertificate(
+                request, new CallerIdentity("issuer", "subject", Set.of())));
+
+    verify(mockMetrics).incrementProcessingCounter(ProcessingStatus.AUDIENCE_MISMATCH);
+  }
+
+  @Test
+  public void issueCertificate_signingError_throwsCertificateExceptionAndIncrementsMetric()
+      throws Exception {
+    KeyPair keyPair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+    PKCS10CertificationRequest csr = createTestCsr(keyPair);
+    CertificateIssuanceRequest request = createValidRequest(csr.getEncoded());
+
+    when(mockVerifierProvider.getVerifier(any(AttestationEvidence.class)))
+        .thenReturn(Optional.of(mockAttestationVerifier));
+    when(mockAttestationVerifier.verify(
+            any(AttestationEvidence.class), any(PublicKey.class), any(ReferenceValues.class)))
+        .thenReturn(true);
+    when(mockKeyDecoder.decodeRawPublicKey(any())).thenReturn(keyPair.getPublic());
+    when(mockPolicyProvider.getPolicy(any(), any(), any()))
+        .thenReturn(Optional.of(createValidPolicy()));
+    when(mockEndorsementMetadataProvider.getAnnotations(any()))
+        .thenReturn(createValidEndorsementProperties());
+    when(mockEndorsementMetadataProvider.getValidity(any())).thenReturn(createValidity());
+    when(mockkAttestationEvidence.getReferenceValuesType()).thenReturn(ReferenceValuesType.GCP);
+    when(mockTimeProvider.now()).thenReturn(testTime);
+    when(mockCertificateModifiersCreator.create(any())).thenReturn(List.of());
+
+    when(mockCertificateSigner.signCsr(any(), any(), any(), any(), any(), any(), any()))
+        .thenThrow(new java.security.cert.CertificateException("signing failed"));
+
+    assertThrows(
+        java.security.cert.CertificateException.class,
+        () ->
+            transparentCaService.issueCertificate(
+                request, createIdentityWithBinding(keyPair.getPublic())));
+
+    verify(mockMetrics).incrementProcessingCounter(ProcessingStatus.SIGNING_ERROR);
   }
 }

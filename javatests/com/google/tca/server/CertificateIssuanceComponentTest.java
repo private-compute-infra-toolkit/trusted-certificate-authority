@@ -36,7 +36,7 @@ import com.google.tca.domain.CallerIdentity;
 import com.google.tca.domain.CertificateIssuanceRequest;
 import com.google.tca.domain.FileFetcher;
 import com.google.tca.domain.TimeProvider;
-import com.google.tca.domain.TrustedCaService;
+import com.google.tca.domain.TransparentCaService;
 import com.google.tca.domain.attestation.AttestationEvidence;
 import com.google.tca.domain.attestation.AttestationVerifier;
 import com.google.tca.domain.policy.ReferenceValues;
@@ -53,14 +53,19 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1OctetString;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.Extension;
 import org.bouncycastle.asn1.x509.GeneralName;
 import org.bouncycastle.asn1.x509.GeneralNames;
+import org.bouncycastle.asn1.x509.GeneralSubtree;
+import org.bouncycastle.asn1.x509.NameConstraints;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
@@ -68,12 +73,25 @@ import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class CertificateIssuanceComponentTest {
 
-  private TrustedCaService trustedCaService;
+  @Parameters(name = "{0}")
+  public static Collection<Object[]> data() {
+    return Arrays.asList(
+        new Object[][] {
+          {"javatests/com/google/tca/server/testdata/policy/v1/policy.textproto"},
+          {"javatests/com/google/tca/server/testdata/policy/v2/policy.textproto"}
+        });
+  }
+
+  @Parameter public String policyPath;
+
+  private TransparentCaService transparentCaService;
   private X509Certificate rootCertificate;
   private AttestationVerifier mockVerifier;
   private TimeProvider mockTimeProvider;
@@ -98,7 +116,7 @@ public class CertificateIssuanceComponentTest {
     FileFetcher fileFetcher =
         new FileFetcherStub(
             ByteString.copyFromUtf8(
-                readTestFile("javatests/com/google/tca/server/testdata/policy.textproto")
+                readTestFile(policyPath)
                     .replace("{publisher_id_to_replace}", "default_publisher_id@example.com")
                     .replace("{workload_id_to_replace}", "default_workload_id")
                     .replace("issuer: \"https://accounts.google.com\"", "issuer: \"test-issuer\"")
@@ -110,7 +128,7 @@ public class CertificateIssuanceComponentTest {
 
     Injector injector =
         Guice.createInjector(
-            Modules.override(new TrustedCaModule())
+            Modules.override(new TransparentCaModule())
                 .with(
                     new AbstractModule() {
                       @Override
@@ -128,7 +146,7 @@ public class CertificateIssuanceComponentTest {
                     }),
             new LocalModeModule(localArgs));
 
-    trustedCaService = injector.getInstance(TrustedCaService.class);
+    transparentCaService = injector.getInstance(TransparentCaService.class);
     rootCertificate = injector.getInstance(X509Certificate.class);
   }
 
@@ -165,7 +183,7 @@ public class CertificateIssuanceComponentTest {
         "https://tca.local.test/v1/certificates:issue?pubkey_sha256=" + digest;
 
     List<X509Certificate> issuedCerts =
-        trustedCaService.issueCertificate(
+        transparentCaService.issueCertificate(
             request,
             new CallerIdentity("test-issuer", "test-subject", java.util.Set.of(expectedAudience)));
 
@@ -181,7 +199,7 @@ public class CertificateIssuanceComponentTest {
 
     // Verify the SAN extension
     String expectedSpiffeId =
-        "spiffe://example.org/operator/test_operator/publisher/example.com/default_publisher_id/workload/default_workload_id";
+        "spiffe://example.org.tca.local.test/operator/example.org/test_operator_role/publisher/example.com/default_publisher_id/workload/default_workload_id";
     GeneralNames names =
         GeneralNames.getInstance(
             ASN1OctetString.getInstance(
@@ -190,6 +208,25 @@ public class CertificateIssuanceComponentTest {
     GeneralName sanEntry = names.getNames()[0];
     assertThat(sanEntry.getTagNo()).isEqualTo(GeneralName.uniformResourceIdentifier);
     assertThat(sanEntry.getName().toString()).isEqualTo(expectedSpiffeId);
+
+    // Verify Name Constraints
+    byte[] nameConstraintsBytes = issuedCert.getExtensionValue(Extension.nameConstraints.getId());
+    assertThat(nameConstraintsBytes).isNotNull();
+    try (ASN1InputStream is =
+        new ASN1InputStream(new java.io.ByteArrayInputStream(nameConstraintsBytes))) {
+      ASN1OctetString octetString = (ASN1OctetString) is.readObject();
+      NameConstraints nameConstraints = NameConstraints.getInstance(octetString.getOctets());
+
+      GeneralSubtree[] permitted = nameConstraints.getPermittedSubtrees();
+      assertThat(permitted).hasLength(2);
+      assertThat(permitted[0].getBase().getTagNo())
+          .isEqualTo(GeneralName.uniformResourceIdentifier);
+      String suffix = policyPath.contains("/v2/") ? ".tca.local.test" : "";
+      assertThat(permitted[0].getBase().getName().toString()).isEqualTo(".example1.org" + suffix);
+      assertThat(permitted[1].getBase().getTagNo())
+          .isEqualTo(GeneralName.uniformResourceIdentifier);
+      assertThat(permitted[1].getBase().getName().toString()).isEqualTo(".example2.org" + suffix);
+    }
 
     assertEquals(rootCertificate, issuedCerts.get(1));
   }

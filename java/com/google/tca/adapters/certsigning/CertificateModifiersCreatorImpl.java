@@ -18,15 +18,25 @@ package com.google.tca.adapters.certsigning;
 
 import com.google.tca.domain.CertificateModifier;
 import com.google.tca.domain.CertificateModifiersCreator;
+import com.google.tca.domain.TrustDomain;
 import com.google.tca.domain.policy.BasicConstraints;
 import com.google.tca.domain.policy.NameConstraints;
 import com.google.tca.domain.policy.Policy;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import java.util.ArrayList;
 import java.util.List;
 
 @Singleton
 public class CertificateModifiersCreatorImpl implements CertificateModifiersCreator {
+
+  private final String trustDomain;
+
+  @Inject
+  public CertificateModifiersCreatorImpl(@TrustDomain String trustDomain) {
+    this.trustDomain = trustDomain;
+  }
+
   @Override
   public List<CertificateModifier> create(Policy policy) {
     List<CertificateModifier> modifiers = new ArrayList<>();
@@ -34,7 +44,8 @@ public class CertificateModifiersCreatorImpl implements CertificateModifiersCrea
     if (policy.certificateAttributes().extensions().nameConstraints().isPresent()) {
       NameConstraints constraints =
           policy.certificateAttributes().extensions().nameConstraints().get();
-      NameConstraintsModifier ncm = new NameConstraintsModifier(constraints.permittedSubtrees());
+      NameConstraintsModifier ncm =
+          new NameConstraintsModifier(constraints.permittedSubtrees(), trustDomain);
       modifiers.add(ncm);
     }
 
@@ -45,7 +56,7 @@ public class CertificateModifiersCreatorImpl implements CertificateModifiersCrea
       modifiers.add(new KeyUsageModifier(basicConstraints));
     }
 
-    modifiers.add(new SubjectAlternativeNameModifier(policy));
+    modifiers.add(new SubjectAlternativeNameModifier(policy, trustDomain));
 
     return modifiers;
   }

@@ -19,7 +19,9 @@ package com.google.tca.adapters.oidc;
 import com.google.common.flogger.FluentLogger;
 import com.google.common.io.BaseEncoding;
 import com.google.tca.domain.AudienceBindingValidator;
+import com.google.tca.domain.AudienceValidationException;
 import com.google.tca.domain.CallerIdentity;
+import com.google.tca.domain.TrustDomain;
 import com.google.tca.server.AwsInstanceMetadata;
 import jakarta.inject.Inject;
 import java.security.MessageDigest;
@@ -69,7 +71,7 @@ public final class OidcAudienceBindingValidator implements AudienceBindingValida
             + "https://<hostname>/v1/certificates:issue?pubkey_sha256=%s, where <hostname> is "
             + "either a trust domain, global or regional hostname. Found audiences: %s",
         expectedDigest, audiences);
-    throw new IllegalArgumentException("OIDC audience binding validation failed.");
+    throw new AudienceValidationException("OIDC audience binding validation failed.");
   }
 
   private boolean isValidHostname(String hostname) {

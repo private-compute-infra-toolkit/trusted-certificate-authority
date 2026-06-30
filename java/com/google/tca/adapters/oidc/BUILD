@@ -24,7 +24,6 @@ java_library(
         "OidcDiscoveryFetcher.java",
         "OidcJwksKeyFetcher.java",
         "OidcJwksKeyLocator.java",
-        "TrustDomain.java",
     ],
     runtime_deps = [
         "@maven//:com_google_flogger_flogger_system_backend",

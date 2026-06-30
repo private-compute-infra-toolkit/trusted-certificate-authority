@@ -71,3 +71,18 @@ java_test(
         "@maven//:org_mockito_mockito_core",
     ],
 )
+
+java_test(
+    name = "NameConstraintsModifierTest",
+    srcs = ["NameConstraintsModifierTest.java"],
+    test_class = "com.google.tca.adapters.certsigning.NameConstraintsModifierTest",
+    deps = [
+        "//java/com/google/tca/adapters/certsigning",
+        "//java/com/google/tca/domain/policy",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
+        "@maven//:org_bouncycastle_bcpkix_jdk18on",
+        "@maven//:org_bouncycastle_bcprov_jdk18on",
+        "@maven//:org_mockito_mockito_core",
+    ],
+)

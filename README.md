@@ -1,4 +1,4 @@
-# Trusted Certificate Authority
+# Transparent Certificate Authority (TCA)
 
 ## Testing with GCP Confidential Space workload
 

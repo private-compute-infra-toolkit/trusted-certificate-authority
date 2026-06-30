@@ -18,10 +18,13 @@ package com.google.tca.domain;
 
 import static com.google.common.collect.Comparators.max;
 import static com.google.common.collect.Comparators.min;
+import static com.google.tca.domain.metric.ProcessingStatus.AUDIENCE_MISMATCH;
 import static com.google.tca.domain.metric.ProcessingStatus.INCORRECT_CERTIFICATE_VALIDITY;
 import static com.google.tca.domain.metric.ProcessingStatus.INVALID_ATTESTATION_TOKEN;
+import static com.google.tca.domain.metric.ProcessingStatus.INVALID_CSR;
 import static com.google.tca.domain.metric.ProcessingStatus.MISSING_POLICY;
 import static com.google.tca.domain.metric.ProcessingStatus.MISSING_VERIFIER;
+import static com.google.tca.domain.metric.ProcessingStatus.SIGNING_ERROR;
 import static com.google.tca.domain.metric.ProcessingStatus.SUCCESS;
 
 import com.google.common.flogger.FluentLogger;
@@ -49,7 +52,7 @@ import org.bouncycastle.asn1.x500.X500NameBuilder;
 import org.bouncycastle.asn1.x500.style.BCStyle;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 
-public class TrustedCaService {
+public class TransparentCaService {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
   private final X509Certificate rootCertificate;
@@ -65,7 +68,7 @@ public class TrustedCaService {
   private final Metrics metrics;
 
   @Inject
-  public TrustedCaService(
+  public TransparentCaService(
       X509Certificate rootCertificate,
       PrivateKey privateKey,
       AttestationVerifierProvider verifierProvider,
@@ -93,8 +96,21 @@ public class TrustedCaService {
   public List<X509Certificate> issueCertificate(
       CertificateIssuanceRequest request, CallerIdentity callerIdentity)
       throws java.io.IOException, CertificateException {
-    PublicKey csrPublicKey = extractPublicKey(request);
-    audienceBindingValidator.validate(csrPublicKey, callerIdentity);
+    PublicKey csrPublicKey;
+    try {
+      csrPublicKey = extractPublicKey(request);
+    } catch (java.io.IOException e) {
+      metrics.incrementProcessingCounter(INVALID_CSR);
+      throw e;
+    }
+
+    try {
+      audienceBindingValidator.validate(csrPublicKey, callerIdentity);
+    } catch (AudienceValidationException e) {
+      metrics.incrementProcessingCounter(AUDIENCE_MISMATCH);
+      throw e;
+    }
+
     AttestationEvidence evidence = request.getAttestationEvidence();
     EndorsementAnnotations annotations =
         endorsementMetadataProvider.getAnnotations(evidence.getRawBinaryEndorsement());
@@ -141,16 +157,23 @@ public class TrustedCaService {
     }
 
     List<CertificateModifier> modifiers = certificateModifiersCreator.create(policy);
-    X509Certificate signedCertificate =
-        certificateSigner.signCsr(
-            request.getCertificateSigningRequest().toByteArray(),
-            rootCertificate,
-            privateKey,
-            certificateValidityStart,
-            certificateValidityEnd,
-            modifiers,
-            createSubjectPrincipal(policy.certificateAttributes().certificateSubject()));
+    X509Certificate signedCertificate;
+    try {
+      signedCertificate =
+          certificateSigner.signCsr(
+              request.getCertificateSigningRequest().toByteArray(),
+              rootCertificate,
+              privateKey,
+              certificateValidityStart,
+              certificateValidityEnd,
+              modifiers,
+              createSubjectPrincipal(policy.certificateAttributes().certificateSubject()));
+    } catch (CertificateException e) {
+      metrics.incrementProcessingCounter(SIGNING_ERROR);
+      throw e;
+    }
     metrics.incrementProcessingCounter(SUCCESS);
+    metrics.incrementCertificateIssuanceCounter(callerIdentity.getClientId());
     return List.of(signedCertificate, rootCertificate);
   }
 

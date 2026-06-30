@@ -26,7 +26,7 @@ java_test(
         "//java/com/google/tca/attestation/oak",
         "//java/com/google/tca/domain/attestation",
         "//java/com/google/tca/domain/policy",
-        "//java/com/google/tca/proto:trusted_certificate_authority_java_proto",
+        "//java/com/google/tca/proto:transparent_certificate_authority_java_proto",
         "@maven//:com_google_crypto_tink_tink",
         "@maven//:com_google_protobuf_protobuf_java",
         "@maven//:com_google_truth_truth",

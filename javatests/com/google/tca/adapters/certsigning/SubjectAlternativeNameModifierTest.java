@@ -82,18 +82,22 @@ public class SubjectAlternativeNameModifierTest {
   @Test
   public void apply_addsSubjectAlternativeNameExtension() throws Exception {
     Policy policy =
-        new Policy(
-            "test-publisher@example.com",
-            "test-app",
-            "example.org",
-            "test-operator",
-            List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)),
-            new X509CertificateAttributes(
-                Duration.ofHours(1),
-                new X509Extensions(Optional.empty(), Optional.empty()),
-                new X500NameAttributes(Map.of("2.5.4.3", "test-subject"))));
+        Policy.builder()
+            .setPublisherId("test-publisher@example.com")
+            .setWorkloadId("test-app")
+            .setOperatorDomain("example.org")
+            .setOperatorRole("test-operator-role")
+            .setReferenceValuesList(
+                List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)))
+            .setCertificateAttributes(
+                new X509CertificateAttributes(
+                    Duration.ofHours(1),
+                    new X509Extensions(Optional.empty(), Optional.empty()),
+                    new X500NameAttributes(Map.of("2.5.4.3", "test-subject"))))
+            .build();
 
-    SubjectAlternativeNameModifier modifier = new SubjectAlternativeNameModifier(policy);
+    SubjectAlternativeNameModifier modifier =
+        new SubjectAlternativeNameModifier(policy, "tca.local.test");
 
     modifier.apply(builder);
 
@@ -107,24 +111,28 @@ public class SubjectAlternativeNameModifierTest {
     assertThat(namesArray[0].getTagNo()).isEqualTo(GeneralName.uniformResourceIdentifier);
     assertThat(namesArray[0].getName().toString())
         .isEqualTo(
-            "spiffe://example.org/operator/test-operator/publisher/example.com/test-publisher/workload/test-app");
+            "spiffe://example.org.tca.local.test/operator/example.org/test-operator-role/publisher/example.com/test-publisher/workload/test-app");
   }
 
   @Test
   public void apply_throwsRuntimeExceptionOnCertIOException() throws Exception {
     Policy policy =
-        new Policy(
-            "test-publisher@example.com",
-            "test-app",
-            "example.org",
-            "test-operator",
-            List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)),
-            new X509CertificateAttributes(
-                Duration.ofHours(1),
-                new X509Extensions(Optional.empty(), Optional.empty()),
-                new X500NameAttributes(Map.of("2.5.4.3", "test-subject"))));
+        Policy.builder()
+            .setPublisherId("test-publisher@example.com")
+            .setWorkloadId("test-app")
+            .setOperatorDomain("example.org")
+            .setOperatorRole("test-operator-role")
+            .setReferenceValuesList(
+                List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)))
+            .setCertificateAttributes(
+                new X509CertificateAttributes(
+                    Duration.ofHours(1),
+                    new X509Extensions(Optional.empty(), Optional.empty()),
+                    new X500NameAttributes(Map.of("2.5.4.3", "test-subject"))))
+            .build();
 
-    SubjectAlternativeNameModifier modifier = new SubjectAlternativeNameModifier(policy);
+    SubjectAlternativeNameModifier modifier =
+        new SubjectAlternativeNameModifier(policy, "tca.local.test");
 
     X509v3CertificateBuilder mockBuilder = mock(X509v3CertificateBuilder.class);
     when(mockBuilder.addExtension(

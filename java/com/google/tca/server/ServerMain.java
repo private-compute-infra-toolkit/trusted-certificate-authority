@@ -23,7 +23,7 @@ import com.google.inject.Guice;
 import com.google.inject.Injector;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 
-/** An Armeria server that hosts the TrustedCaService with gRPC and REST support. */
+/** An Armeria server that hosts the TransparentCaService with gRPC and REST support. */
 public class ServerMain {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
@@ -55,23 +55,26 @@ public class ServerMain {
     Injector injector;
     if (LocalArgs.COMMAND_NAME.equals(parsedCommand)) {
       logger.atInfo().log("Starting in Local Mode");
-      injector = Guice.createInjector(new TrustedCaModule(), new LocalModeModule(localArgs));
+      injector = Guice.createInjector(new TransparentCaModule(), new LocalModeModule(localArgs));
     } else if (KmsArgs.COMMAND_NAME.equals(parsedCommand)) {
       logger.atInfo().log("Starting in KMS Mode");
-      injector = Guice.createInjector(new TrustedCaModule(), new KmsModeModule(kmsArgs));
+      injector = Guice.createInjector(new TransparentCaModule(), new KmsModeModule(kmsArgs));
     } else {
       logger.atInfo().log(
           "No command specified. Defaulting to KMS Mode with default configuration.");
-      injector = Guice.createInjector(new TrustedCaModule(), new KmsModeModule(kmsArgs));
+      injector = Guice.createInjector(new TransparentCaModule(), new KmsModeModule(kmsArgs));
     }
 
-    TrustedCertificateAuthorityGrpcHandler service =
+    TransparentCertificateAuthorityGrpcHandler service =
+        injector.getInstance(TransparentCertificateAuthorityGrpcHandler.class);
+    TrustedCertificateAuthorityGrpcHandler legacyService =
         injector.getInstance(TrustedCertificateAuthorityGrpcHandler.class);
     JwtInterceptor jwtInterceptor = injector.getInstance(JwtInterceptor.class);
     PrometheusMeterRegistry meterRegistry = injector.getInstance(PrometheusMeterRegistry.class);
 
     int port = 50051;
-    TcaServer tcaServer = new TcaServer(port, service, jwtInterceptor, meterRegistry);
+    TcaServer tcaServer =
+        new TcaServer(port, service, legacyService, jwtInterceptor, meterRegistry);
 
     tcaServer.start().join();
 

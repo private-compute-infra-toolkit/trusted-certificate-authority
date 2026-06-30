@@ -27,6 +27,7 @@ import com.google.kmsclient.KmsGeneratedKey;
 import com.google.mbs.KeyBackupBucketProperties;
 import com.google.mbs.MeasurementBoundCertificate;
 import com.google.mbs.MeasurementBoundCertificateProvider;
+import com.google.mbs.Metrics;
 import com.google.mbs.attestationcollection.AttestationCollector;
 import com.google.mbs.attestationcollection.AttestationToken;
 import com.google.tlog.TlogEntry;
@@ -87,9 +88,10 @@ public class KmsModeModuleTest {
     KmsModeModule module = new KmsModeModule(kmsArgs, awsInstanceMetadata);
 
     // 2. Get the provider
+    Metrics mockMetrics = mock(Metrics.class);
     MeasurementBoundCertificateProvider provider =
         module.provideCertificateProvider(
-            kmsClient, s3Client, bucketProperties, tlogClient, attestationCollector);
+            kmsClient, s3Client, bucketProperties, tlogClient, attestationCollector, mockMetrics);
 
     // 3. Setup mocks to trigger the certificate generation path
     when(s3Client.getObject(any(GetObjectRequest.class)))
@@ -119,7 +121,7 @@ public class KmsModeModuleTest {
 
     // 6. Verify the constructed SPIFFE ID in the SAN extension
     String expectedSpiffeId =
-        "spiffe://tca.testenv.testdomain/operator/pcit.goog/123456789012/publisher/google.com/pcit-release-bot/workload/trusted-certificate-authority";
+        "spiffe://tca.testenv.testdomain/operator/pcit.goog/123456789012/publisher/google.com/pcit-release-bot/workload/transparent-certificate-authority";
 
     byte[] sanExtensionValue = rootCert.getExtensionValue(Extension.subjectAlternativeName.getId());
     assertThat(sanExtensionValue).isNotNull();
@@ -149,9 +151,10 @@ public class KmsModeModuleTest {
     KmsModeModule module = new KmsModeModule(kmsArgs, awsInstanceMetadata);
 
     // 2. Get the provider
+    Metrics mockMetrics = mock(Metrics.class);
     MeasurementBoundCertificateProvider provider =
         module.provideCertificateProvider(
-            kmsClient, s3Client, bucketProperties, tlogClient, attestationCollector);
+            kmsClient, s3Client, bucketProperties, tlogClient, attestationCollector, mockMetrics);
 
     // 3. Setup mocks to trigger the certificate generation path
     when(s3Client.getObject(any(GetObjectRequest.class)))
@@ -181,7 +184,7 @@ public class KmsModeModuleTest {
 
     // 6. Verify the constructed SPIFFE ID in the SAN extension (should be tca.pcit.goog)
     String expectedSpiffeId =
-        "spiffe://tca.pcit.goog/operator/pcit.goog/123456789012/publisher/google.com/pcit-release-bot/workload/trusted-certificate-authority";
+        "spiffe://tca.pcit.goog/operator/pcit.goog/123456789012/publisher/google.com/pcit-release-bot/workload/transparent-certificate-authority";
 
     byte[] sanExtensionValue = rootCert.getExtensionValue(Extension.subjectAlternativeName.getId());
     assertThat(sanExtensionValue).isNotNull();

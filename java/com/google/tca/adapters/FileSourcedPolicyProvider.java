@@ -22,21 +22,52 @@ import com.google.protobuf.TextFormat;
 import com.google.tca.domain.CallerIdentity;
 import com.google.tca.domain.FileFetcher;
 import com.google.tca.domain.PolicyProvider;
+import com.google.tca.domain.metric.Metrics;
+import com.google.tca.domain.metric.ProcessingStatus;
 import com.google.tca.domain.policy.FileLoadException;
 import com.google.tca.domain.policy.Policies;
 import com.google.tca.domain.policy.Policy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import java.util.List;
 import java.util.Optional;
 
 @Singleton
 public class FileSourcedPolicyProvider implements PolicyProvider {
   private final FileFetcher fileFetcher;
+  private final Metrics metrics;
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
+  @FunctionalInterface
+  private interface PolicyParser {
+    Policies parse(String content) throws TextFormat.ParseException;
+  }
+
+  private record NamedParser(String name, PolicyParser parser) {}
+
+  private static final List<NamedParser> PARSERS =
+      List.of(
+          new NamedParser(
+              "google.tca.policy.v2.Policies",
+              content -> {
+                com.google.tca.policy.v2.Policies.Builder builder =
+                    com.google.tca.policy.v2.Policies.newBuilder();
+                TextFormat.getParser().merge(content, builder);
+                return PolicyV2Mapper.toDomain(builder.build());
+              }),
+          new NamedParser(
+              "google.tca.policy.v1.Policies",
+              content -> {
+                com.google.tca.policy.v1.Policies.Builder builder =
+                    com.google.tca.policy.v1.Policies.newBuilder();
+                TextFormat.getParser().merge(content, builder);
+                return PolicyV1Mapper.toDomain(builder.build());
+              }));
+
   @Inject
-  public FileSourcedPolicyProvider(FileFetcher fileFetcher) {
+  public FileSourcedPolicyProvider(FileFetcher fileFetcher, Metrics metrics) {
     this.fileFetcher = fileFetcher;
+    this.metrics = metrics;
   }
 
   @Override
@@ -59,20 +90,19 @@ public class FileSourcedPolicyProvider implements PolicyProvider {
     }
     ByteString rawFile = rawFileOpt.get();
 
-    com.google.tca.policy.v1.Policies.Builder builder =
-        com.google.tca.policy.v1.Policies.newBuilder();
-
+    String rawFileContent = rawFile.toStringUtf8();
+    Policies domainPolicies;
     try {
-      TextFormat.getParser().merge(rawFile.toStringUtf8(), builder);
-    } catch (TextFormat.ParseException e) {
-      logger.atWarning().log("Failed to parse file for clientId = %s", clientId);
+      domainPolicies = parsePolicies(clientId, rawFileContent);
+    } catch (Exception e) {
+      logger.atWarning().log(
+          "Failed to parse policy file for clientId = %s, error = %s", clientId, e.getMessage());
       return Optional.empty();
     }
-    com.google.tca.policy.v1.Policies proto = builder.build();
-    Policies domainPolicies = PolicyMapper.toDomain(proto);
 
     if (!domainPolicies.issuer().equals(identity.issuer())
         || !domainPolicies.subject().equals(identity.subject())) {
+      metrics.incrementProcessingCounter(ProcessingStatus.POLICY_IDENTITY_MISMATCH);
       throw new IllegalArgumentException(
           String.format(
               "Policy identity mismatch. File for %s has issuer: %s, subject: %s, but request has"
@@ -84,6 +114,8 @@ public class FileSourcedPolicyProvider implements PolicyProvider {
               identity.subject()));
     }
 
+    metrics.allowMetricsForClientId(clientId);
+
     String key = publisherId + "/" + workloadId;
     Policy policy = domainPolicies.get(key);
 
@@ -94,5 +126,18 @@ public class FileSourcedPolicyProvider implements PolicyProvider {
       return Optional.empty();
     }
     return Optional.of(policy);
+  }
+
+  private static Policies parsePolicies(String clientId, String rawFileContent) {
+    for (NamedParser namedParser : PARSERS) {
+      try {
+        return namedParser.parser().parse(rawFileContent);
+      } catch (TextFormat.ParseException e) {
+        logger.atInfo().log(
+            "Failed to parse policy file with %s parser for clientId = %s, error = %s",
+            namedParser.name(), clientId, e.getMessage());
+      }
+    }
+    throw new IllegalArgumentException("All available parsers failed to parse the policy content.");
   }
 }

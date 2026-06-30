@@ -12,27 +12,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_java//java:defs.bzl", "java_library")
+load("@rules_java//java:defs.bzl", "java_library", "java_plugin")
 
 package(default_visibility = ["//visibility:public"])
+
+java_plugin(
+    name = "auto_builder_plugin",
+    processor_class = "com.google.auto.value.processor.AutoBuilderProcessor",
+    deps = ["@maven//:com_google_auto_value_auto_value"],
+)
 
 java_library(
     name = "policy",
     srcs = [
         "BasicConstraints.java",
         "BasicConstraintsType.java",
+        "DnsNameConstraintInTrustDomain.java",
         "FileLoadException.java",
         "InvalidPolicyException.java",
+        "NameConstraint.java",
         "NameConstraints.java",
         "Policies.java",
         "Policy.java",
         "ReferenceValues.java",
         "ReferenceValuesType.java",
+        "UriNameConstraint.java",
+        "UriNameConstraintInTrustDomain.java",
         "X500NameAttributes.java",
         "X509CertificateAttributes.java",
         "X509Extensions.java",
     ],
+    plugins = [
+        ":auto_builder_plugin",
+    ],
     deps = [
+        "@maven//:com_google_auto_value_auto_value_annotations",
         "@maven//:com_google_protobuf_protobuf_java",
     ],
 )

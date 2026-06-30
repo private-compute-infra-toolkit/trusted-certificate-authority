@@ -4,7 +4,7 @@
       "host": "",
       "project": "",
       "repository": "",
-      "namespace": "private-compute-infra-toolkit/trusted-certificate-authority"
+      "namespace": "private-compute-infra-toolkit/transparent-certificate-authority"
     },
     "images": {
       "build-env": {

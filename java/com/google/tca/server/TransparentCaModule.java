@@ -42,7 +42,6 @@ import com.google.tca.adapters.oidc.OidcAudienceBindingValidator;
 import com.google.tca.adapters.oidc.OidcDiscoveryFetcher;
 import com.google.tca.adapters.oidc.OidcJwksKeyFetcher;
 import com.google.tca.adapters.oidc.OidcJwksKeyLocator;
-import com.google.tca.adapters.oidc.TrustDomain;
 import com.google.tca.attestation.aws.AwsAttestationVerifier;
 import com.google.tca.attestation.gcp.GcpAttestation;
 import com.google.tca.attestation.gcp.GcpAttestationVerifier;
@@ -56,6 +55,7 @@ import com.google.tca.domain.FileFetcher;
 import com.google.tca.domain.KeyDecoder;
 import com.google.tca.domain.PolicyProvider;
 import com.google.tca.domain.TimeProvider;
+import com.google.tca.domain.TrustDomain;
 import com.google.tca.domain.TrustDomainExtractor;
 import com.google.tca.domain.attestation.AttestationEvidence;
 import com.google.tca.domain.attestation.AttestationVerifier;
@@ -78,10 +78,10 @@ import java.util.Optional;
 import software.amazon.awssdk.services.s3.S3Client;
 
 /** Guice module for the TCA service. */
-public class TrustedCaModule extends AbstractModule {
+public class TransparentCaModule extends AbstractModule {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
-  public TrustedCaModule() {}
+  public TransparentCaModule() {}
 
   @Override
   protected void configure() {

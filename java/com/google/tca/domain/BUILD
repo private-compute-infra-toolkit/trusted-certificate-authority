@@ -26,6 +26,7 @@ java_library(
     name = "domain",
     srcs = [
         "AudienceBindingValidator.java",
+        "AudienceValidationException.java",
         "CallerIdentity.java",
         "CertificateIssuanceRequest.java",
         "CertificateModifier.java",
@@ -36,8 +37,9 @@ java_library(
         "KeyDecoder.java",
         "PolicyProvider.java",
         "TimeProvider.java",
+        "TransparentCaService.java",
+        "TrustDomain.java",
         "TrustDomainExtractor.java",
-        "TrustedCaService.java",
     ],
     plugins = [":auto_value_plugin"],
     runtime_deps = [

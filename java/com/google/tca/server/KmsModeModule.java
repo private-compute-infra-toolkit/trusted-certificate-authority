@@ -28,8 +28,10 @@ import com.google.mbs.KmsMeasurementBoundCertificateProvider;
 import com.google.mbs.MbsCertificateFactory;
 import com.google.mbs.MeasurementBoundCertificate;
 import com.google.mbs.MeasurementBoundCertificateProvider;
+import com.google.mbs.Metrics;
 import com.google.mbs.attestationcollection.AttestationCollector;
 import com.google.tca.adapters.PolicyBucket;
+import com.google.tca.adapters.SystemMetrics;
 import com.google.tlog.TransparencyLogClient;
 import jakarta.inject.Singleton;
 import java.nio.charset.StandardCharsets;
@@ -66,6 +68,7 @@ public class KmsModeModule extends AbstractModule {
         .annotatedWith(PolicyBucket.class)
         .toInstance(awsResourceNames.configBucketName());
     bind(AwsInstanceMetadata.class).toInstance(awsInstanceMetadata);
+    bind(Metrics.class).to(SystemMetrics.class);
   }
 
   @Provides
@@ -83,7 +86,8 @@ public class KmsModeModule extends AbstractModule {
       S3Client s3Client,
       KeyBackupBucketProperties bucketProperties,
       TransparencyLogClient tlogClient,
-      AttestationCollector attestationCollector) {
+      AttestationCollector attestationCollector,
+      Metrics metrics) {
     String resourceNamesJson = new Gson().toJson(awsResourceNames);
     byte[] userData = resourceNamesJson.getBytes(StandardCharsets.UTF_8);
 
@@ -93,7 +97,7 @@ public class KmsModeModule extends AbstractModule {
     String trustDomain = constructTrustDomain(env, domain);
     String spiffeId =
         String.format(
-            "spiffe://%s/operator/pcit.goog/%s/publisher/google.com/pcit-release-bot/workload/trusted-certificate-authority",
+            "spiffe://%s/operator/pcit.goog/%s/publisher/google.com/pcit-release-bot/workload/transparent-certificate-authority",
             trustDomain, operatorRole);
     GeneralName uriSan = new GeneralName(GeneralName.uniformResourceIdentifier, spiffeId);
     Optional<GeneralNames> san = Optional.of(new GeneralNames(uriSan));
@@ -112,7 +116,8 @@ public class KmsModeModule extends AbstractModule {
             new X500Name("C=US, O=Google LLC, CN=TCA Root"),
             Duration.ofDays(120),
             san,
-            KeyUsage.keyCertSign));
+            KeyUsage.keyCertSign),
+        metrics);
   }
 
   @Provides

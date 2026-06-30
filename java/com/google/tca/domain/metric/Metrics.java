@@ -17,7 +17,12 @@
 package com.google.tca.domain.metric;
 
 public interface Metrics {
-  void incrementAuthorizationCounter(Status status);
+  /** Tracks the success or failure of JWT token authentication. */
+  void incrementAuthenticationCounter(Status status);
 
   void incrementProcessingCounter(ProcessingStatus status);
+
+  void allowMetricsForClientId(String clientId);
+
+  void incrementCertificateIssuanceCounter(String clientId);
 }

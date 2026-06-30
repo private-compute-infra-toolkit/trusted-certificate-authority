@@ -25,6 +25,7 @@ public interface AudienceBindingValidator {
    *
    * @param csrPublicKey the public key from the CSR.
    * @param callerIdentity the identity of the caller.
+   * @throws AudienceValidationException if validation fails.
    */
   void validate(PublicKey csrPublicKey, CallerIdentity callerIdentity);
 }

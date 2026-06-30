@@ -44,7 +44,7 @@ public class SystemMetricsTest {
     for (Status status : Status.values()) {
       double value =
           registry
-              .get("tca.authorizationStatus")
+              .get("tca.authenticationStatus")
               .tag("status", status.name().toLowerCase())
               .counter()
               .count();
@@ -63,15 +63,15 @@ public class SystemMetricsTest {
   }
 
   @Test
-  public void incrementAuthorizationCounter_succeeds() {
-    systemMetrics.incrementAuthorizationCounter(Status.SUCCESS);
-    systemMetrics.incrementAuthorizationCounter(Status.SUCCESS);
-    systemMetrics.incrementAuthorizationCounter(Status.FAILURE);
+  public void incrementAuthenticationCounter_succeeds() {
+    systemMetrics.incrementAuthenticationCounter(Status.SUCCESS);
+    systemMetrics.incrementAuthenticationCounter(Status.SUCCESS);
+    systemMetrics.incrementAuthenticationCounter(Status.FAILURE);
 
     double successVal =
-        registry.get("tca.authorizationStatus").tag("status", "success").counter().count();
+        registry.get("tca.authenticationStatus").tag("status", "success").counter().count();
     double failureVal =
-        registry.get("tca.authorizationStatus").tag("status", "failure").counter().count();
+        registry.get("tca.authenticationStatus").tag("status", "failure").counter().count();
 
     assertThat(successVal).isEqualTo(2.0);
     assertThat(failureVal).isEqualTo(1.0);
@@ -94,15 +94,56 @@ public class SystemMetricsTest {
 
   @Test
   public void increment_nullInputs_safelyIgnored() {
-    systemMetrics.incrementAuthorizationCounter(null);
+    systemMetrics.incrementAuthenticationCounter(null);
     systemMetrics.incrementProcessingCounter(null);
 
     double successA =
-        registry.get("tca.authorizationStatus").tag("status", "success").counter().count();
+        registry.get("tca.authenticationStatus").tag("status", "success").counter().count();
     double successB =
         registry.get("tca.processingStatus").tag("status", "success").counter().count();
 
     assertThat(successA).isEqualTo(0.0);
     assertThat(successB).isEqualTo(0.0);
+  }
+
+  @Test
+  public void incrementCertificateIssuanceCounter_approvedClient_succeeds() {
+    String clientId = "approved-client";
+    systemMetrics.allowMetricsForClientId(clientId);
+    systemMetrics.incrementCertificateIssuanceCounter(clientId);
+    systemMetrics.incrementCertificateIssuanceCounter(clientId);
+
+    double value =
+        registry.get("tca.certificateIssuance").tag("client_id", clientId).counter().count();
+    assertThat(value).isEqualTo(2.0);
+  }
+
+  @Test
+  public void incrementCertificateIssuanceCounter_unapprovedClient_ignored() {
+    String clientId = "unapproved-client";
+    systemMetrics.incrementCertificateIssuanceCounter(clientId);
+
+    assertThat(registry.find("tca.certificateIssuance").tag("client_id", clientId).counter())
+        .isNull();
+  }
+
+  @Test
+  public void allowMetricsForClient_Id_exceedLimit_ignored() {
+    for (int i = 0; i < 1000; i++) {
+      systemMetrics.allowMetricsForClientId("client-" + i);
+    }
+    // 1001st client
+    systemMetrics.allowMetricsForClientId("client-1000");
+
+    // Verify first 1000 are approved and can be incremented
+    for (int i = 0; i < 1000; i++) {
+      systemMetrics.incrementCertificateIssuanceCounter("client-" + i);
+      assertThat(registry.find("tca.certificateIssuance").tag("client_id", "client-" + i).counter())
+          .isNotNull();
+    }
+    // Verify 1001st is NOT approved
+    systemMetrics.incrementCertificateIssuanceCounter("client-1000");
+    assertThat(registry.find("tca.certificateIssuance").tag("client_id", "client-1000").counter())
+        .isNull();
   }
 }

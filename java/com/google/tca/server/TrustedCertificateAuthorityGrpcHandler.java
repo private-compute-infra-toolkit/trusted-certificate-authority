@@ -16,81 +16,29 @@
 
 package com.google.tca.server;
 
-import com.google.common.flogger.FluentLogger;
-import com.google.protobuf.ByteString;
-import com.google.tca.adapters.CertificateIssuanceRequestMapper;
-import com.google.tca.domain.CallerIdentity;
-import com.google.tca.domain.CertificateIssuanceRequest;
-import com.google.tca.domain.TrustedCaService;
 import com.google.tca.v1.IssueCertificateRequest;
 import com.google.tca.v1.IssueCertificateResponse;
 import com.google.tca.v1.TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityImplBase;
-import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import jakarta.inject.Inject;
-import java.io.IOException;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
-import java.util.List;
-import java.util.Set;
 
+/**
+ * gRPC handler for the deprecated TrustedCertificateAuthority service. Delegates all calls directly
+ * to the TransparentCertificateAuthorityGrpcHandler to ensure a zero-downtime transition period.
+ */
+@Deprecated
 public class TrustedCertificateAuthorityGrpcHandler extends TrustedCertificateAuthorityImplBase {
-  private static final FluentLogger logger = FluentLogger.forEnclosingClass();
-  private final TrustedCaService trustedCaService;
+  private final TransparentCertificateAuthorityGrpcHandler delegate;
 
   @Inject
-  public TrustedCertificateAuthorityGrpcHandler(TrustedCaService trustedCaService) {
-    this.trustedCaService = trustedCaService;
+  public TrustedCertificateAuthorityGrpcHandler(
+      TransparentCertificateAuthorityGrpcHandler delegate) {
+    this.delegate = delegate;
   }
 
   @Override
   public void issueCertificate(
       IssueCertificateRequest request, StreamObserver<IssueCertificateResponse> responseObserver) {
-    String issuer = JwtInterceptor.ISSUER_CONTEXT_KEY.get();
-    String subject = JwtInterceptor.SUBJECT_CONTEXT_KEY.get();
-    Set<String> audiences = JwtInterceptor.AUDIENCE_CONTEXT_KEY.get();
-
-    if (issuer == null || subject == null || audiences == null) {
-      responseObserver.onError(
-          Status.UNAUTHENTICATED.withDescription("Missing JWT token").asRuntimeException());
-      return;
-    }
-
-    CallerIdentity callerIdentity = new CallerIdentity(issuer, subject, audiences);
-    try {
-      CertificateIssuanceRequest domainRequest = CertificateIssuanceRequestMapper.toDomain(request);
-      logger.atInfo().log(
-          "Received a request with evidence of type %s",
-          request.getAttestationEvidence().getEvidenceCase());
-
-      List<X509Certificate> certificateChain =
-          trustedCaService.issueCertificate(domainRequest, callerIdentity);
-
-      IssueCertificateResponse.Builder responseBuilder = IssueCertificateResponse.newBuilder();
-      for (X509Certificate cert : certificateChain) {
-        responseBuilder.addSignedCertificates(ByteString.copyFrom(cert.getEncoded()));
-      }
-      IssueCertificateResponse response = responseBuilder.build();
-
-      responseObserver.onNext(response);
-      responseObserver.onCompleted();
-    } catch (IllegalArgumentException e) {
-      logger.atWarning().log("IllegalArgumentException: %s", e.getMessage());
-      responseObserver.onError(
-          Status.INVALID_ARGUMENT.withDescription(e.getMessage()).asRuntimeException());
-    } catch (IllegalStateException e) {
-      responseObserver.onError(
-          Status.FAILED_PRECONDITION.withDescription(e.getMessage()).asRuntimeException());
-    } catch (IOException e) {
-      // A bad CSR leads to an IOException during parsing. This is a client error.
-      logger.atWarning().log("Failed to parse CSR: %s.", e.getMessage());
-      responseObserver.onError(
-          Status.INVALID_ARGUMENT.withDescription("Invalid CSR").asRuntimeException());
-    } catch (CertificateException e) {
-      // A signing error is an internal server error.
-      logger.atSevere().withCause(e).log("Failed to sign certificate");
-      responseObserver.onError(
-          Status.INTERNAL.withDescription("Failed to sign certificate").asRuntimeException());
-    }
+    delegate.issueCertificate(request, responseObserver);
   }
 }

@@ -27,9 +27,11 @@ import com.google.tca.adapters.certsigning.SubjectAlternativeNameModifier;
 import com.google.tca.domain.TimeProvider;
 import com.google.tca.domain.policy.BasicConstraints;
 import com.google.tca.domain.policy.BasicConstraintsType;
+import com.google.tca.domain.policy.NameConstraint;
 import com.google.tca.domain.policy.Policy;
 import com.google.tca.domain.policy.ReferenceValues;
 import com.google.tca.domain.policy.ReferenceValuesType;
+import com.google.tca.domain.policy.UriNameConstraintInTrustDomain;
 import com.google.tca.domain.policy.X500NameAttributes;
 import com.google.tca.domain.policy.X509CertificateAttributes;
 import com.google.tca.domain.policy.X509Extensions;
@@ -40,6 +42,7 @@ import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -48,6 +51,9 @@ import org.bouncycastle.asn1.ASN1OctetString;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AuthorityKeyIdentifier;
 import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.GeneralSubtree;
+import org.bouncycastle.asn1.x509.NameConstraints;
 import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
@@ -73,6 +79,7 @@ public class CertificateSignerImplTest {
   private X509Certificate issuerCert;
 
   private final Instant testTime = Instant.parse("2000-01-01T12:34:56Z");
+  private static final String TCA_DOMAIN = "tca.local.test";
 
   @Before
   public void setUp() throws Exception {
@@ -88,8 +95,8 @@ public class CertificateSignerImplTest {
         new JcaX509v3CertificateBuilder(
             new X500Name("CN=Issuer CA"),
             BigInteger.ONE,
-            java.util.Date.from(testTime.minus(Duration.ofDays(1))),
-            java.util.Date.from(testTime.plus(Duration.ofDays(10))),
+            Date.from(testTime.minus(Duration.ofDays(1))),
+            Date.from(testTime.plus(Duration.ofDays(10))),
             new X500Name("CN=Issuer CA"),
             issuerKeyPair.getPublic());
 
@@ -145,8 +152,10 @@ public class CertificateSignerImplTest {
     BasicConstraints bcConfig = new BasicConstraints(BasicConstraintsType.CA, 3);
     BasicConstraintsModifier bcModifier = new BasicConstraintsModifier(bcConfig);
 
-    List<String> permittedSubtrees = List.of("permitted.example.com");
-    NameConstraintsModifier ncModifier = new NameConstraintsModifier(permittedSubtrees);
+    String permittedDomain = "permitted.example.com";
+    List<NameConstraint> permittedSubtrees =
+        List.of(new UriNameConstraintInTrustDomain(permittedDomain));
+    NameConstraintsModifier ncModifier = new NameConstraintsModifier(permittedSubtrees, TCA_DOMAIN);
 
     KeyUsageModifier kuModifier = new KeyUsageModifier(bcConfig);
     SubjectAlternativeNameModifier sanModifier = getSubjectAlternativeNameModifier();
@@ -173,20 +182,19 @@ public class CertificateSignerImplTest {
 
     assertThat(signedCert.getBasicConstraints()).isEqualTo(3);
 
-    byte[] ncExtensionValue =
-        signedCert.getExtensionValue(org.bouncycastle.asn1.x509.Extension.nameConstraints.getId());
+    byte[] ncExtensionValue = signedCert.getExtensionValue(Extension.nameConstraints.getId());
     assertThat(ncExtensionValue).isNotNull();
 
-    org.bouncycastle.asn1.x509.NameConstraints nc =
+    NameConstraints nc =
         org.bouncycastle.asn1.x509.NameConstraints.getInstance(
-            org.bouncycastle.asn1.ASN1OctetString.getInstance(ncExtensionValue).getOctets());
+            ASN1OctetString.getInstance(ncExtensionValue).getOctets());
 
     assertThat(nc.getPermittedSubtrees()).isNotNull();
     assertThat(nc.getPermittedSubtrees()).hasLength(1);
-    org.bouncycastle.asn1.x509.GeneralSubtree subtree = nc.getPermittedSubtrees()[0];
-    assertThat(subtree.getBase().getTagNo())
-        .isEqualTo(org.bouncycastle.asn1.x509.GeneralName.uniformResourceIdentifier);
-    assertThat(subtree.getBase().getName().toString()).isEqualTo("permitted.example.com");
+    GeneralSubtree subtree = nc.getPermittedSubtrees()[0];
+    assertThat(subtree.getBase().getTagNo()).isEqualTo(GeneralName.uniformResourceIdentifier);
+    assertThat(subtree.getBase().getName().toString())
+        .isEqualTo(String.format("%s.%s", permittedDomain, TCA_DOMAIN));
 
     Collection<List<?>> sans = signedCert.getSubjectAlternativeNames();
     assertThat(sans).isNotNull();
@@ -195,7 +203,9 @@ public class CertificateSignerImplTest {
     assertThat(san.get(0)).isEqualTo(6); // uniformResourceIdentifier
     assertThat(san.get(1))
         .isEqualTo(
-            "spiffe://example.org/operator/test-operator/publisher/example.com/test-publisher/workload/test-app");
+            String.format(
+                "spiffe://example.org.%s/operator/example.org/test-operator/publisher/example.com/test-publisher/workload/test-app",
+                TCA_DOMAIN));
   }
 
   @Test
@@ -248,8 +258,8 @@ public class CertificateSignerImplTest {
         new JcaX509v3CertificateBuilder(
             new X500Name("CN=Issuer CA"),
             BigInteger.ONE,
-            java.util.Date.from(testTime.minus(Duration.ofDays(1))),
-            java.util.Date.from(testTime.plus(Duration.ofDays(10))),
+            Date.from(testTime.minus(Duration.ofDays(1))),
+            Date.from(testTime.plus(Duration.ofDays(10))),
             new X500Name("CN=Issuer CA"),
             issuerKeyPair.getPublic());
     ContentSigner signer =
@@ -285,16 +295,19 @@ public class CertificateSignerImplTest {
 
   private SubjectAlternativeNameModifier getSubjectAlternativeNameModifier() {
     Policy policy =
-        new Policy(
-            "test-publisher@example.com",
-            "test-app",
-            "example.org",
-            "test-operator",
-            List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)),
-            new X509CertificateAttributes(
-                Duration.ofHours(1),
-                new X509Extensions(Optional.empty(), Optional.empty()),
-                new X500NameAttributes(Map.of())));
-    return new SubjectAlternativeNameModifier(policy);
+        Policy.builder()
+            .setPublisherId("test-publisher@example.com")
+            .setWorkloadId("test-app")
+            .setOperatorDomain("example.org")
+            .setOperatorRole("test-operator")
+            .setReferenceValuesList(
+                List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)))
+            .setCertificateAttributes(
+                new X509CertificateAttributes(
+                    Duration.ofHours(1),
+                    new X509Extensions(Optional.empty(), Optional.empty()),
+                    new X500NameAttributes(Map.of())))
+            .build();
+    return new SubjectAlternativeNameModifier(policy, TCA_DOMAIN);
   }
 }

@@ -27,18 +27,22 @@ import org.bouncycastle.cert.X509v3CertificateBuilder;
 public class SubjectAlternativeNameModifier implements CertificateModifier {
 
   private final Policy policy;
+  private final String tcaTrustDomain;
 
-  public SubjectAlternativeNameModifier(Policy policy) {
+  public SubjectAlternativeNameModifier(Policy policy, String tcaTrustDomain) {
     this.policy = policy;
+    this.tcaTrustDomain = tcaTrustDomain;
   }
 
   @Override
   public void apply(X509v3CertificateBuilder builder) {
+    String workloadTrustDomain = policy.operatorDomain() + "." + tcaTrustDomain;
     String san =
         String.format(
-            "spiffe://%s/operator/%s/publisher/%s/workload/%s",
-            policy.trustDomain(),
-            policy.operator(),
+            "spiffe://%s/operator/%s/%s/publisher/%s/workload/%s",
+            workloadTrustDomain,
+            policy.operatorDomain(),
+            policy.operatorRole(),
             toSpiffeIdPublisher(policy.publisherId()),
             policy.workloadId());
 

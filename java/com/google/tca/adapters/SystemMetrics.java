@@ -16,6 +16,8 @@
 
 package com.google.tca.adapters;
 
+import com.google.common.flogger.FluentLogger;
+import com.google.mbs.Metrics.MbsEvent;
 import com.google.tca.domain.metric.Metrics;
 import com.google.tca.domain.metric.ProcessingStatus;
 import com.google.tca.domain.metric.Status;
@@ -23,23 +25,31 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Singleton
-public class SystemMetrics implements Metrics {
+public class SystemMetrics implements Metrics, com.google.mbs.Metrics {
 
+  private static final FluentLogger logger = FluentLogger.forEnclosingClass();
   private static final String PREFIX = "tca.";
+  private static final int MAX_APPROVED_CLIENTS = 1000;
 
   private final PrometheusMeterRegistry registry;
-  private final Counter[] authorizationCounter;
+  private final Counter[] authenticationCounter;
   private final Counter[] processingCounter;
+  private final Counter[] mbsEventCounter;
+  private final Set<String> approvedClients = ConcurrentHashMap.newKeySet();
+  private final ConcurrentHashMap<String, Counter> issuanceCounters = new ConcurrentHashMap<>();
 
   @Inject
   public SystemMetrics(PrometheusMeterRegistry registry) {
     this.registry = registry;
-    this.authorizationCounter =
-        createCounters(PREFIX + "authorizationStatus", "status", Status.class);
+    this.authenticationCounter =
+        createCounters(PREFIX + "authenticationStatus", "status", Status.class);
     this.processingCounter =
         createCounters(PREFIX + "processingStatus", "status", ProcessingStatus.class);
+    this.mbsEventCounter = createCounters(PREFIX + "mbsEvent", "event", MbsEvent.class);
   }
 
   private <E extends Enum<E>> Counter[] createCounters(
@@ -57,9 +67,9 @@ public class SystemMetrics implements Metrics {
   }
 
   @Override
-  public void incrementAuthorizationCounter(Status status) {
+  public void incrementAuthenticationCounter(Status status) {
     if (status != null) {
-      authorizationCounter[status.ordinal()].increment();
+      authenticationCounter[status.ordinal()].increment();
     }
   }
 
@@ -67,6 +77,47 @@ public class SystemMetrics implements Metrics {
   public void incrementProcessingCounter(ProcessingStatus status) {
     if (status != null) {
       processingCounter[status.ordinal()].increment();
+    }
+  }
+
+  @Override
+  public void allowMetricsForClientId(String clientId) {
+    if (approvedClients.contains(clientId)) {
+      return;
+    }
+    synchronized (this) {
+      if (approvedClients.contains(clientId)) {
+        return;
+      }
+      if (approvedClients.size() < MAX_APPROVED_CLIENTS) {
+        approvedClients.add(clientId);
+      } else {
+        logger.atWarning().log(
+            "Max approved clients limit (%d) reached. Rejecting client: %s",
+            MAX_APPROVED_CLIENTS, clientId);
+      }
+    }
+  }
+
+  @Override
+  public void incrementCertificateIssuanceCounter(String clientId) {
+    if (clientId != null && approvedClients.contains(clientId)) {
+      issuanceCounters
+          .computeIfAbsent(
+              clientId,
+              id ->
+                  Counter.builder(PREFIX + "certificateIssuance")
+                      .tag("client_id", id)
+                      .description("Number of certificates issued per client")
+                      .register(registry))
+          .increment();
+    }
+  }
+
+  @Override
+  public void recordEvent(MbsEvent event) {
+    if (event != null) {
+      mbsEventCounter[event.ordinal()].increment();
     }
   }
 }

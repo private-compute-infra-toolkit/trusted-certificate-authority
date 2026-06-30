@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.5.0 (2026-06-30)
+
+
+### Features
+
+* Add custom metrics - certificate issuance by clientId
+* Add metrics for failure cases
+* Add missing processing status to metrics
+* Add support for Policy v2 textproto parsing
+* Add timeout for OidcDiscoveryFetcher.fetchJwksUri
+* Copy policy/v1 related files as policy/v2 without modification
+* Delegate processing from Event Loop to Blocking Pool
+* Integrate MBS metrics
+* Rename AuthorizationCounter to AuthenticationCounter
+* represent name constraints polymorphically in domain model
+* Update container-tools to fix enclave watcher resets
+* Use TCA's trust domain to construct client's SPIFFE ID
+
+
+### Bug Fixes
+
+* Fix metric cloudwatch filter name
+* **kokoro:** manually tag copied AMIs to bypass launch permission errors
+* return 403 Forbidden on OIDC audience validation failure
+
 ## 0.4.0 (2026-06-25)
 
 

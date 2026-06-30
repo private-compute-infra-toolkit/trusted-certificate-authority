@@ -34,7 +34,7 @@ import com.google.tca.domain.metric.Metrics;
 import com.google.tca.domain.metric.ProcessingStatus;
 import com.google.tca.v1.IssueCertificateRequest;
 import com.google.tca.v1.IssueCertificateResponse;
-import com.google.tca.v1.TrustedCertificateAuthorityGrpc;
+import com.google.tca.v1.TransparentCertificateAuthorityGrpc;
 import com.linecorp.armeria.client.WebClient;
 import com.linecorp.armeria.common.AggregatedHttpResponse;
 import com.linecorp.armeria.common.HttpStatus;
@@ -76,7 +76,9 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.testcontainers.containers.localstack.LocalStackContainer;
@@ -92,8 +94,19 @@ import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class FullIntegrationTest {
+
+  @Parameters(name = "{0}")
+  public static java.util.Collection<Object[]> data() {
+    return java.util.Arrays.asList(
+        new Object[][] {
+          {"javatests/com/google/tca/server/testdata/policy/v1/policy.textproto"},
+          {"javatests/com/google/tca/server/testdata/policy/v2/policy.textproto"}
+        });
+  }
+
+  @Parameter public String policyPath;
   private static final int ANY_PORT = 0;
 
   @Rule public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
@@ -106,8 +119,9 @@ public class FullIntegrationTest {
   private Injector injector;
   private TcaServer tcaServer;
   private WebClient httpClient;
-  private TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub client;
-  private TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub baseBlockingStub;
+  private TransparentCertificateAuthorityGrpc.TransparentCertificateAuthorityBlockingStub client;
+  private TransparentCertificateAuthorityGrpc.TransparentCertificateAuthorityBlockingStub
+      baseBlockingStub;
   private java.security.PrivateKey jwtPrivateKey;
 
   public static LocalStackContainer localstack =
@@ -179,7 +193,7 @@ public class FullIntegrationTest {
 
     injector =
         Guice.createInjector(
-            Modules.override(new TrustedCaModule())
+            Modules.override(new TransparentCaModule())
                 .with(
                     new AbstractModule() {
                       @Override
@@ -207,12 +221,14 @@ public class FullIntegrationTest {
                       }
                     }));
 
-    TrustedCertificateAuthorityGrpcHandler service =
+    TransparentCertificateAuthorityGrpcHandler service =
+        injector.getInstance(TransparentCertificateAuthorityGrpcHandler.class);
+    TrustedCertificateAuthorityGrpcHandler legacyService =
         injector.getInstance(TrustedCertificateAuthorityGrpcHandler.class);
     JwtInterceptor jwtInterceptor = injector.getInstance(JwtInterceptor.class);
     PrometheusMeterRegistry meterRegistry = injector.getInstance(PrometheusMeterRegistry.class);
 
-    tcaServer = new TcaServer(ANY_PORT, service, jwtInterceptor, meterRegistry);
+    tcaServer = new TcaServer(ANY_PORT, service, legacyService, jwtInterceptor, meterRegistry);
     tcaServer.start().join();
 
     httpClient = WebClient.of("http://127.0.0.1:" + tcaServer.port());
@@ -221,7 +237,7 @@ public class FullIntegrationTest {
         grpcCleanup.register(
             ManagedChannelBuilder.forAddress("localhost", tcaServer.port()).usePlaintext().build());
 
-    baseBlockingStub = TrustedCertificateAuthorityGrpc.newBlockingStub(channel);
+    baseBlockingStub = TransparentCertificateAuthorityGrpc.newBlockingStub(channel);
 
     Metadata metadata = new Metadata();
     metadata.put(
@@ -231,8 +247,8 @@ public class FullIntegrationTest {
     client = baseBlockingStub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
   }
 
-  private TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub withTokenForCsr(
-      byte[] csrBytes) throws Exception {
+  private TransparentCertificateAuthorityGrpc.TransparentCertificateAuthorityBlockingStub
+      withTokenForCsr(byte[] csrBytes) throws Exception {
     org.bouncycastle.pkcs.PKCS10CertificationRequest csr =
         new org.bouncycastle.pkcs.PKCS10CertificationRequest(csrBytes);
     byte[] csrPublicKeyBytes = csr.getSubjectPublicKeyInfo().getEncoded();
@@ -328,7 +344,7 @@ public class FullIntegrationTest {
     assertThat(signedCert.getNotAfter().toInstant()).isEqualTo(testTime.plusSeconds(3600));
 
     String expectedSpiffeId =
-        "spiffe://example.org/operator/test_operator/publisher/google.com/pcit-release-bot/workload/"
+        "spiffe://example.org.tca.local.test/operator/example.org/test_operator_role/publisher/google.com/pcit-release-bot/workload/"
             + goldenRequest.getWorkloadId();
 
     // Verify the SAN extension
@@ -353,10 +369,11 @@ public class FullIntegrationTest {
       assertThat(permitted).hasLength(2);
       GeneralName generalName1 = permitted[0].getBase();
       assertThat(generalName1.getTagNo()).isEqualTo(GeneralName.uniformResourceIdentifier);
-      assertThat(generalName1.getName().toString()).isEqualTo(".example1.org");
+      String suffix = policyPath.contains("/v2/") ? ".tca.local.test" : "";
+      assertThat(generalName1.getName().toString()).isEqualTo(".example1.org" + suffix);
       GeneralName generalName2 = permitted[1].getBase();
       assertThat(generalName2.getTagNo()).isEqualTo(GeneralName.uniformResourceIdentifier);
-      assertThat(generalName2.getName().toString()).isEqualTo(".example2.org");
+      assertThat(generalName2.getName().toString()).isEqualTo(".example2.org" + suffix);
     }
 
     // Verify the Basic Constraints extension
@@ -381,7 +398,7 @@ public class FullIntegrationTest {
     GoldenRequest goldenRequest = new GoldenRequest();
     IssueCertificateRequest request = goldenRequest.getRequestBody();
 
-    TrustedCertificateAuthorityGrpc.TrustedCertificateAuthorityBlockingStub authStub =
+    TransparentCertificateAuthorityGrpc.TransparentCertificateAuthorityBlockingStub authStub =
         withTokenForCsr(request.getCertificateSigningRequest().toByteArray());
     StatusRuntimeException thrown =
         assertThrows(StatusRuntimeException.class, () -> authStub.issueCertificate(request));
@@ -406,26 +423,32 @@ public class FullIntegrationTest {
     AggregatedHttpResponse initialRes = httpClient.get("/metrics").aggregate().join();
     assertThat(initialRes.status()).isEqualTo(HttpStatus.OK);
     assertThat(initialRes.contentUtf8())
-        .contains("tca_authorizationStatus_total{status=\"success\"} 0.0");
+        .contains("tca_authenticationStatus_total{status=\"success\"} 0.0");
     assertThat(initialRes.contentUtf8())
-        .contains("tca_authorizationStatus_total{status=\"failure\"} 0.0");
+        .contains("tca_authenticationStatus_total{status=\"failure\"} 0.0");
     assertThat(initialRes.contentUtf8())
         .contains("tca_processingStatus_total{status=\"success\"} 0.0");
     assertThat(initialRes.contentUtf8())
         .contains("tca_processingStatus_total{status=\"missing_policy\"} 0.0");
+    assertThat(initialRes.contentUtf8())
+        .contains("tca_processingStatus_total{status=\"policy_identity_mismatch\"} 0.0");
 
     // Increment specific targets
-    metrics.incrementAuthorizationCounter(com.google.tca.domain.metric.Status.SUCCESS);
+    metrics.incrementAuthenticationCounter(com.google.tca.domain.metric.Status.SUCCESS);
     metrics.incrementProcessingCounter(ProcessingStatus.SUCCESS);
 
     // Verify targeted indices are incremented while others remain at 0.0
     AggregatedHttpResponse res = httpClient.get("/metrics").aggregate().join();
     assertThat(res.status()).isEqualTo(HttpStatus.OK);
-    assertThat(res.contentUtf8()).contains("tca_authorizationStatus_total{status=\"success\"} 1.0");
-    assertThat(res.contentUtf8()).contains("tca_authorizationStatus_total{status=\"failure\"} 0.0");
+    assertThat(res.contentUtf8())
+        .contains("tca_authenticationStatus_total{status=\"success\"} 1.0");
+    assertThat(res.contentUtf8())
+        .contains("tca_authenticationStatus_total{status=\"failure\"} 0.0");
     assertThat(res.contentUtf8()).contains("tca_processingStatus_total{status=\"success\"} 1.0");
     assertThat(res.contentUtf8())
         .contains("tca_processingStatus_total{status=\"missing_policy\"} 0.0");
+    assertThat(res.contentUtf8())
+        .contains("tca_processingStatus_total{status=\"policy_identity_mismatch\"} 0.0");
   }
 
   @Test
@@ -439,20 +462,51 @@ public class FullIntegrationTest {
     // Verify HELP metadata headers
     assertThat(res.contentUtf8())
         .contains(
-            "# HELP tca_authorizationStatus_total Metrics tracking for tca.authorizationStatus");
+            "# HELP tca_authenticationStatus_total Metrics tracking for tca.authenticationStatus");
     assertThat(res.contentUtf8())
         .contains("# HELP tca_processingStatus_total Metrics tracking for tca.processingStatus");
 
     // Verify TYPE metadata headers
-    assertThat(res.contentUtf8()).contains("# TYPE tca_authorizationStatus_total counter");
+    assertThat(res.contentUtf8()).contains("# TYPE tca_authenticationStatus_total counter");
     assertThat(res.contentUtf8()).contains("# TYPE tca_processingStatus_total counter");
 
     // Verify raw initial value line format
-    assertThat(res.contentUtf8()).contains("tca_authorizationStatus_total{status=\"success\"} 0.0");
-    assertThat(res.contentUtf8()).contains("tca_authorizationStatus_total{status=\"failure\"} 0.0");
+    assertThat(res.contentUtf8())
+        .contains("tca_authenticationStatus_total{status=\"success\"} 0.0");
+    assertThat(res.contentUtf8())
+        .contains("tca_authenticationStatus_total{status=\"failure\"} 0.0");
     assertThat(res.contentUtf8()).contains("tca_processingStatus_total{status=\"success\"} 0.0");
     assertThat(res.contentUtf8())
         .contains("tca_processingStatus_total{status=\"missing_policy\"} 0.0");
+    assertThat(res.contentUtf8())
+        .contains("tca_processingStatus_total{status=\"policy_identity_mismatch\"} 0.0");
+  }
+
+  @Test
+  public void issueCertificate_fails_when_policy_identity_mismatched() throws Exception {
+    GoldenRequest goldenRequest = new GoldenRequest();
+    uploadMismatchedPolicyToS3(goldenRequest.getPublisherId(), goldenRequest.getWorkloadId());
+
+    Instant testTime =
+        goldenRequest.getNotBefore().plusSeconds(10000).truncatedTo(ChronoUnit.SECONDS);
+    IssueCertificateRequest request = goldenRequest.getRequestBody();
+
+    when(timeProvider.currentTimeMillis()).thenReturn(testTime.toEpochMilli());
+    when(timeProvider.now()).thenReturn(Instant.ofEpochMilli(testTime.toEpochMilli()));
+
+    StatusRuntimeException thrown =
+        assertThrows(
+            StatusRuntimeException.class,
+            () ->
+                withTokenForCsr(request.getCertificateSigningRequest().toByteArray())
+                    .issueCertificate(request));
+    assertEquals(Status.Code.INVALID_ARGUMENT, thrown.getStatus().getCode());
+    assertThat(thrown.getStatus().getDescription()).contains("Policy identity mismatch");
+
+    AggregatedHttpResponse res = httpClient.get("/metrics").aggregate().join();
+    assertThat(res.status()).isEqualTo(HttpStatus.OK);
+    assertThat(res.contentUtf8())
+        .contains("tca_processingStatus_total{status=\"policy_identity_mismatch\"} 1.0");
   }
 
   private static String readTestFile(String path) throws Exception {
@@ -466,7 +520,7 @@ public class FullIntegrationTest {
   }
 
   private void uploadPolicyToS3(String publisher_id, String workload_id) throws Exception {
-    String policy = readTestFile("javatests/com/google/tca/server/testdata/policy.textproto");
+    String policy = readTestFile(policyPath);
     String oakContainersReferenceValues =
         readTestFile("javatests/com/google/tca/server/testdata/reference_values.textproto");
     policy =
@@ -474,6 +528,21 @@ public class FullIntegrationTest {
             .replace("{publisher_id_to_replace}", publisher_id)
             .replace("{workload_id_to_replace}", workload_id)
             .replace("{oak_containers_reference_values}", oakContainersReferenceValues);
+    uploadFileToS3("https_003a_002f_002faccounts.google.com/jwt-token-test-sub", policy);
+  }
+
+  private void uploadMismatchedPolicyToS3(String publisher_id, String workload_id)
+      throws Exception {
+    String policy =
+        readTestFile("javatests/com/google/tca/server/testdata/policy/v1/policy.textproto");
+    String oakContainersReferenceValues =
+        readTestFile("javatests/com/google/tca/server/testdata/reference_values.textproto");
+    policy =
+        policy
+            .replace("{publisher_id_to_replace}", publisher_id)
+            .replace("{workload_id_to_replace}", workload_id)
+            .replace("{oak_containers_reference_values}", oakContainersReferenceValues)
+            .replace("jwt-token-test-sub", "mismatched-sub");
     uploadFileToS3("https_003a_002f_002faccounts.google.com/jwt-token-test-sub", policy);
   }
 }

@@ -22,10 +22,12 @@ import com.google.protobuf.ByteString;
 import com.google.tca.domain.CertificateModifier;
 import com.google.tca.domain.policy.BasicConstraints;
 import com.google.tca.domain.policy.BasicConstraintsType;
+import com.google.tca.domain.policy.DnsNameConstraintInTrustDomain;
 import com.google.tca.domain.policy.NameConstraints;
 import com.google.tca.domain.policy.Policy;
 import com.google.tca.domain.policy.ReferenceValues;
 import com.google.tca.domain.policy.ReferenceValuesType;
+import com.google.tca.domain.policy.UriNameConstraintInTrustDomain;
 import com.google.tca.domain.policy.X500NameAttributes;
 import com.google.tca.domain.policy.X509CertificateAttributes;
 import com.google.tca.domain.policy.X509Extensions;
@@ -45,24 +47,31 @@ public class CertificateModifiersCreatorImplTest {
 
   @Before
   public void setUp() {
-    creator = new CertificateModifiersCreatorImpl();
+    creator = new CertificateModifiersCreatorImpl("tca.local.test");
   }
 
   @Test
   public void create_withAllExtensions_returnsAllModifiers() {
     Policy policy =
-        new Policy(
-            "test-publisher",
-            "test-app",
-            "example.org",
-            "test-operator",
-            List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)),
-            new X509CertificateAttributes(
-                Duration.ofHours(1),
-                new X509Extensions(
-                    Optional.of(new BasicConstraints(BasicConstraintsType.CA, 3)),
-                    Optional.of(new NameConstraints(List.of("permitted.example.com")))),
-                new X500NameAttributes(Map.of())));
+        Policy.builder()
+            .setPublisherId("test-publisher")
+            .setWorkloadId("test-app")
+            .setOperatorDomain("example.org")
+            .setOperatorRole("test-operator")
+            .setReferenceValuesList(
+                List.of(new ReferenceValues(ReferenceValuesType.GCP, ByteString.EMPTY)))
+            .setCertificateAttributes(
+                new X509CertificateAttributes(
+                    Duration.ofHours(1),
+                    new X509Extensions(
+                        Optional.of(new BasicConstraints(BasicConstraintsType.CA, 3)),
+                        Optional.of(
+                            new NameConstraints(
+                                List.of(
+                                    new UriNameConstraintInTrustDomain("permitted.example.com"),
+                                    new DnsNameConstraintInTrustDomain("permitted.example.com"))))),
+                    new X500NameAttributes(Map.of())))
+            .build();
 
     List<CertificateModifier> modifiers = creator.create(policy);
 

@@ -16,6 +16,7 @@
 
 package com.google.tca.domain.policy;
 
+import com.google.auto.value.AutoBuilder;
 import java.util.List;
 
 /**
@@ -25,7 +26,30 @@ import java.util.List;
 public record Policy(
     String publisherId,
     String workloadId,
-    String trustDomain,
-    String operator,
+    String operatorDomain,
+    String operatorRole,
     List<ReferenceValues> referenceValuesList,
-    X509CertificateAttributes certificateAttributes) {}
+    X509CertificateAttributes certificateAttributes) {
+
+  public static Builder builder() {
+    return new AutoBuilder_Policy_Builder();
+  }
+
+  /** Builder for {@link Policy}. */
+  @AutoBuilder
+  public interface Builder {
+    Builder setPublisherId(String publisherId);
+
+    Builder setWorkloadId(String workloadId);
+
+    Builder setOperatorDomain(String operatorDomain);
+
+    Builder setOperatorRole(String operatorRole);
+
+    Builder setReferenceValuesList(List<ReferenceValues> referenceValuesList);
+
+    Builder setCertificateAttributes(X509CertificateAttributes certificateAttributes);
+
+    Policy build();
+  }
+}

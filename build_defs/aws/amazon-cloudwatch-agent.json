@@ -25,7 +25,19 @@
               "source_labels": ["job"],
               "label_matcher": "^tca$",
               "dimensions": [["status"]],
-              "metric_selectors": ["^tca_authorizationStatus_total$", "^tca_processingStatus_total$"]
+              "metric_selectors": ["^tca_authenticationStatus_total$", "^tca_processingStatus_total$"]
+            },
+            {
+              "source_labels": ["job"],
+              "label_matcher": "^tca$",
+              "dimensions": [["client_id"]],
+              "metric_selectors": ["^tca_certificateIssuance_total$"]
+            },
+            {
+              "source_labels": ["job"],
+              "label_matcher": "^tca$",
+              "dimensions": [["event"]],
+              "metric_selectors": ["^tca_mbsEvent_total$"]
             }
           ]
         }

@@ -19,6 +19,7 @@ package com.google.tca.adapters.oidc;
 import static org.junit.Assert.assertThrows;
 
 import com.google.common.io.BaseEncoding;
+import com.google.tca.domain.AudienceValidationException;
 import com.google.tca.domain.CallerIdentity;
 import com.google.tca.server.AwsInstanceMetadata;
 import java.security.KeyPair;
@@ -97,7 +98,7 @@ public final class OidcAudienceBindingValidatorTest {
     CallerIdentity callerIdentity = new CallerIdentity("issuer", "subject", Set.of(audience));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 
@@ -112,7 +113,7 @@ public final class OidcAudienceBindingValidatorTest {
     CallerIdentity callerIdentity = new CallerIdentity("issuer", "subject", Set.of(audience));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 
@@ -127,7 +128,7 @@ public final class OidcAudienceBindingValidatorTest {
     CallerIdentity callerIdentity = new CallerIdentity("issuer", "subject", Set.of(audience));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 
@@ -142,7 +143,7 @@ public final class OidcAudienceBindingValidatorTest {
     CallerIdentity callerIdentity = new CallerIdentity("issuer", "subject", Set.of(audience));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 
@@ -157,7 +158,7 @@ public final class OidcAudienceBindingValidatorTest {
     CallerIdentity callerIdentity = new CallerIdentity("issuer", "subject", Set.of(audience));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 
@@ -171,7 +172,7 @@ public final class OidcAudienceBindingValidatorTest {
     CallerIdentity callerIdentity = new CallerIdentity("issuer", "subject", Set.of(audience));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 
@@ -186,7 +187,7 @@ public final class OidcAudienceBindingValidatorTest {
     CallerIdentity callerIdentity = new CallerIdentity("issuer", "subject", Set.of(audience));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 
@@ -202,7 +203,7 @@ public final class OidcAudienceBindingValidatorTest {
     CallerIdentity callerIdentity = new CallerIdentity("issuer", "subject", Set.of(audience));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 
@@ -216,7 +217,7 @@ public final class OidcAudienceBindingValidatorTest {
     CallerIdentity callerIdentity = new CallerIdentity("issuer", "subject", Set.of(audience));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 
@@ -231,7 +232,7 @@ public final class OidcAudienceBindingValidatorTest {
     CallerIdentity callerIdentity = new CallerIdentity("issuer", "subject", Set.of(audience));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 
@@ -247,7 +248,7 @@ public final class OidcAudienceBindingValidatorTest {
     CallerIdentity callerIdentity = new CallerIdentity("issuer", "subject", Set.of(audience));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 
@@ -260,7 +261,7 @@ public final class OidcAudienceBindingValidatorTest {
     CallerIdentity callerIdentity = new CallerIdentity("issuer", "subject", Set.of(audience));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 
@@ -273,7 +274,7 @@ public final class OidcAudienceBindingValidatorTest {
         new CallerIdentity("issuer", "subject", Set.of("other-audience"));
 
     assertThrows(
-        IllegalArgumentException.class,
+        AudienceValidationException.class,
         () -> validator.validate(keyPair.getPublic(), callerIdentity));
   }
 

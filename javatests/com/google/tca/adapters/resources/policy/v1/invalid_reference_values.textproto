@@ -1,3 +1,6 @@
+# proto-file: api/google/tca/policy/v1/tca_policy.proto
+# proto-message: google.tca.policy.v1.Policies
+#
 policies {
   key: "policy1"
   value {
@@ -71,63 +74,6 @@ policies {
     }
     reference_values {
       # Empty reference_values
-    }
-  }
-}
-
-policies {
-  key: "policy3"
-  value {
-    publisher_id: "pub-invalid"
-    workload_id: "work-invalid"
-    trust_domain: "invalid.org"
-    certificate_attributes {
-      max_certificate_validity {
-        seconds: 3600
-      }
-    }
-    reference_values {
-      oak_reference_values {
-        oak_containers: {
-          root_layer: {
-            insecure: { }
-          }
-          kernel_layer: {
-            kernel: {
-              endorsement: {
-                rekor: {
-                  skip: { }
-                }
-              }
-            }
-            kernel_cmd_line_text: {
-              skip: { }
-            }
-            init_ram_fs: {
-              skip: { }
-            }
-            memory_map: {
-              skip: { }
-            }
-            acpi: {
-              skip: { }
-            }
-          }
-          system_layer: {
-            system_image: {
-              skip: { }
-            }
-          }
-          container_layer: {
-            binary: {
-              skip: { }
-            }
-            configuration: {
-              skip: { }
-            }
-          }
-        }
-      }
     }
   }
 }

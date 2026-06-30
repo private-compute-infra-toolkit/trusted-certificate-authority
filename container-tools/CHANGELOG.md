@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## 0.7.0 (2026-06-22)
+
+
+### Features
+
+* Removing not needed comment
+
+
+### Bug Fixes
+
+* **enclave:** resolve 10-minute systemd startup timeout in debug mode
+
 ## 0.6.0 (2026-06-18)
 
 

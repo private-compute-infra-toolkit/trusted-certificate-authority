@@ -18,16 +18,24 @@ load("@io_grpc_grpc_java//:java_grpc_library.bzl", "java_grpc_library")
 package(default_visibility = ["//visibility:public"])
 
 java_proto_library(
-    name = "trusted_certificate_authority_java_proto",
-    deps = ["@pcit_api//google/tca/v1:trusted_certificate_authority_proto"],
+    name = "transparent_certificate_authority_java_proto",
+    deps = ["@pcit_api//google/tca/v1:transparent_certificate_authority_proto"],
 )
 
 java_grpc_library(
-    name = "trusted_certificate_authority_java_grpc",
+    name = "transparent_certificate_authority_java_grpc",
     srcs = [
-        "@pcit_api//google/tca/v1:trusted_certificate_authority_proto",
+        "@pcit_api//google/tca/v1:transparent_certificate_authority_proto",
     ],
     deps = [
-        ":trusted_certificate_authority_java_proto",
+        ":transparent_certificate_authority_java_proto",
+    ],
+)
+
+java_proto_library(
+    name = "tca_policy_java_proto",
+    deps = [
+        "@pcit_api//google/tca/policy/v1:tca_policy_proto",
+        "@pcit_api//google/tca/policy/v2:tca_policy_proto",
     ],
 )

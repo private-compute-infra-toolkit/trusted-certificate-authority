@@ -40,7 +40,7 @@ import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** An Armeria server that hosts the TrustedCaService with gRPC and REST support. */
+/** An Armeria server that hosts the TransparentCaService with gRPC and REST support. */
 public class TcaServer {
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -51,7 +51,8 @@ public class TcaServer {
 
   public TcaServer(
       int port,
-      TrustedCertificateAuthorityGrpcHandler service,
+      TransparentCertificateAuthorityGrpcHandler service,
+      TrustedCertificateAuthorityGrpcHandler legacyService,
       JwtInterceptor jwtInterceptor,
       PrometheusMeterRegistry meterRegistry) {
     this.port = port;
@@ -60,15 +61,19 @@ public class TcaServer {
     final GrpcService grpcService =
         GrpcService.builder()
             .addService(ServerInterceptors.intercept(service, jwtInterceptor))
+            .addService(ServerInterceptors.intercept(legacyService, jwtInterceptor))
             .addService(ProtoReflectionService.newInstance())
             .addService(healthManager.getGrpcHealthService())
             .enableHttpJsonTranscoding(true)
+            .useBlockingTaskExecutor(true)
+            // Offload blocking gRPC calls to prevent EventLoop starvation.
             .build();
 
     this.server =
         Server.builder()
             .http(port)
             .meterRegistry(meterRegistry)
+            .blockingTaskExecutor(100)
             .service(
                 grpcService,
                 MetricCollectingService.newDecorator(GrpcMeterIdPrefixFunction.of("tca.server")))

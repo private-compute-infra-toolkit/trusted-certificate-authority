@@ -1,4 +1,4 @@
-# proto-file: api/google/tca/v1/trusted_certificate_authority.proto
+# proto-file: api/google/tca/v1/transparent_certificate_authority.proto
 # proto-message: google.tca.v1.OakAttestationEvidence
 
 evidence {

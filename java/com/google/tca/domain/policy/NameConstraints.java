@@ -18,4 +18,4 @@ package com.google.tca.domain.policy;
 
 import java.util.List;
 
-public record NameConstraints(List<String> permittedSubtrees) {}
+public record NameConstraints(List<NameConstraint> permittedSubtrees) {}

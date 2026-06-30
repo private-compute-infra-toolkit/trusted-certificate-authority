@@ -69,7 +69,7 @@ public final class JwtInterceptor implements ServerInterceptor {
       call.close(
           Status.UNAUTHENTICATED.withDescription("Missing or invalid Authorization header"),
           new Metadata());
-      metrics.incrementAuthorizationCounter(FAILURE);
+      metrics.incrementAuthenticationCounter(FAILURE);
       return new ServerCall.Listener<ReqT>() {};
     }
 
@@ -89,13 +89,13 @@ public final class JwtInterceptor implements ServerInterceptor {
               .withValue(ISSUER_CONTEXT_KEY, issuer)
               .withValue(SUBJECT_CONTEXT_KEY, subject)
               .withValue(AUDIENCE_CONTEXT_KEY, audiences);
-      metrics.incrementAuthorizationCounter(SUCCESS);
+      metrics.incrementAuthenticationCounter(SUCCESS);
       return Contexts.interceptCall(context, call, headers, next);
     } catch (JwtException e) {
       logger.atWarning().withCause(e).log("Failed to parse JWT token");
       call.close(
           Status.UNAUTHENTICATED.withDescription("Failed to parse JWT token"), new Metadata());
-      metrics.incrementAuthorizationCounter(FAILURE);
+      metrics.incrementAuthenticationCounter(FAILURE);
       return new ServerCall.Listener<ReqT>() {};
     }
   }

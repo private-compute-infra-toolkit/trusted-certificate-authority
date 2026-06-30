@@ -17,6 +17,11 @@
 package com.google.tca.adapters.certsigning;
 
 import com.google.tca.domain.CertificateModifier;
+import com.google.tca.domain.policy.DnsNameConstraintInTrustDomain;
+import com.google.tca.domain.policy.NameConstraint;
+import com.google.tca.domain.policy.UriNameConstraint;
+import com.google.tca.domain.policy.UriNameConstraintInTrustDomain;
+import java.util.ArrayList;
 import java.util.List;
 import org.bouncycastle.asn1.x509.Extension;
 import org.bouncycastle.asn1.x509.GeneralName;
@@ -26,26 +31,43 @@ import org.bouncycastle.cert.X509v3CertificateBuilder;
 
 public class NameConstraintsModifier implements CertificateModifier {
 
-  List<String> permitted;
+  private final List<NameConstraint> permitted;
+  private final String trustDomain;
 
-  public NameConstraintsModifier(List<String> permitted) {
+  public NameConstraintsModifier(List<NameConstraint> permitted, String trustDomain) {
     this.permitted = permitted;
+    this.trustDomain = trustDomain;
   }
 
   @Override
   public void apply(X509v3CertificateBuilder builder) {
+    List<GeneralSubtree> permittedSubtrees = new ArrayList<>();
+    for (NameConstraint constraint : permitted) {
+      if (constraint instanceof UriNameConstraint uri) {
+        permittedSubtrees.add(
+            new GeneralSubtree(
+                new GeneralName(GeneralName.uniformResourceIdentifier, uri.domain())));
+      } else if (constraint instanceof UriNameConstraintInTrustDomain uri) {
+        permittedSubtrees.add(
+            new GeneralSubtree(
+                new GeneralName(
+                    GeneralName.uniformResourceIdentifier,
+                    String.format("%s.%s", uri.domain(), trustDomain))));
+      } else if (constraint instanceof DnsNameConstraintInTrustDomain dns) {
+        permittedSubtrees.add(
+            new GeneralSubtree(
+                new GeneralName(
+                    GeneralName.dNSName, String.format("%s.%s", dns.domain(), trustDomain))));
+      } else {
+        throw new IllegalArgumentException(
+            "Unsupported name constraint type: " + constraint.getClass().getName());
+      }
+    }
 
-    List<GeneralSubtree> permittedSubtrees =
-        this.permitted.stream()
-            .map(
-                uri ->
-                    new GeneralSubtree(new GeneralName(GeneralName.uniformResourceIdentifier, uri)))
-            .toList();
+    final GeneralSubtree[] noExcludedSubtrees = {};
 
-    GeneralSubtree[] permitted = permittedSubtrees.toArray(new GeneralSubtree[0]);
-    GeneralSubtree[] excluded = {};
-
-    NameConstraints nameConstraints = new NameConstraints(permitted, excluded);
+    NameConstraints nameConstraints =
+        new NameConstraints(permittedSubtrees.toArray(new GeneralSubtree[0]), noExcludedSubtrees);
     try {
       builder.addExtension(Extension.nameConstraints, true, nameConstraints);
     } catch (Exception e) {

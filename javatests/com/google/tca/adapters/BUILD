@@ -41,7 +41,7 @@ java_test(
         "//java/com/google/tca/adapters",
         "//java/com/google/tca/domain",
         "//java/com/google/tca/domain/attestation",
-        "//java/com/google/tca/proto:trusted_certificate_authority_java_proto",
+        "//java/com/google/tca/proto:transparent_certificate_authority_java_proto",
         "@com_google_protobuf//java/core",
         "@maven//:junit_junit",
     ],
@@ -84,20 +84,44 @@ java_test(
 )
 
 java_test(
-    name = "PolicyMapperTest",
+    name = "PolicyV1MapperTest",
     size = "small",
-    srcs = ["PolicyMapperTest.java"],
-    data = glob(["resources/*.textproto"]),
-    test_class = "com.google.tca.adapters.PolicyMapperTest",
+    srcs = ["PolicyV1MapperTest.java"],
+    data = [
+        "resources/policy/v1/invalid_reference_values.textproto",
+        "resources/policy/v1/test_policies.textproto",
+    ],
+    test_class = "com.google.tca.adapters.PolicyV1MapperTest",
     deps = [
         "//java/com/google/tca/adapters",
         "//java/com/google/tca/domain/policy",
+        "//java/com/google/tca/proto:tca_policy_java_proto",
         "@com_google_protobuf//java/core",
         "@maven//:com_google_guava_guava",
         "@maven//:com_google_truth_truth",
         "@maven//:junit_junit",
         "@oak//proto/attestation:reference_value_java_proto",
-        "@pcit_api//google/tca/policy/v1:tca_policy_java_proto",
+    ],
+)
+
+java_test(
+    name = "PolicyV2MapperTest",
+    size = "small",
+    srcs = ["PolicyV2MapperTest.java"],
+    data = [
+        "resources/policy/v2/invalid_reference_values.textproto",
+        "resources/policy/v2/test_policies.textproto",
+    ],
+    test_class = "com.google.tca.adapters.PolicyV2MapperTest",
+    deps = [
+        "//java/com/google/tca/adapters",
+        "//java/com/google/tca/domain/policy",
+        "//java/com/google/tca/proto:tca_policy_java_proto",
+        "@com_google_protobuf//java/core",
+        "@maven//:com_google_guava_guava",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
+        "@oak//proto/attestation:reference_value_java_proto",
     ],
 )
 
@@ -141,6 +165,27 @@ java_test(
     deps = [
         "//java/com/google/tca/adapters",
         "//java/com/google/tca/domain",
+        "//java/com/google/tca/domain/policy",
+        "@com_google_protobuf//java/core",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
+        "@maven//:org_mockito_mockito_core",
+    ],
+)
+
+java_test(
+    name = "FileSourcedPolicyProviderTest",
+    size = "small",
+    srcs = ["FileSourcedPolicyProviderTest.java"],
+    data = [
+        "resources/policy/v1/test_policies.textproto",
+        "resources/policy/v2/test_policies.textproto",
+    ],
+    test_class = "com.google.tca.adapters.FileSourcedPolicyProviderTest",
+    deps = [
+        "//java/com/google/tca/adapters",
+        "//java/com/google/tca/domain",
+        "//java/com/google/tca/domain/metric",
         "//java/com/google/tca/domain/policy",
         "@com_google_protobuf//java/core",
         "@maven//:com_google_truth_truth",

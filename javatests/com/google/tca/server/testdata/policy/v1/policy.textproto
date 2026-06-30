@@ -8,8 +8,8 @@ policies {
   value {
     publisher_id: "{publisher_id_to_replace}"
     workload_id: "{workload_id_to_replace}"
-    trust_domain: "example.org"
-    operator: "test_operator"
+    # trust_domain is ignored by PolicyMapper
+    operator: "example.org/test_operator_role"
     certificate_attributes {
       max_certificate_validity {
         seconds: 3600

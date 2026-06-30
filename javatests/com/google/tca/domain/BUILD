@@ -26,10 +26,10 @@ java_test(
 )
 
 java_test(
-    name = "TrustedCaServiceTest",
+    name = "TransparentCaServiceTest",
     size = "small",
-    srcs = ["TrustedCaServiceTest.java"],
-    test_class = "com.google.tca.domain.TrustedCaServiceTest",
+    srcs = ["TransparentCaServiceTest.java"],
+    test_class = "com.google.tca.domain.TransparentCaServiceTest",
     deps = [
         "//java/com/google/tca/domain",
         "//java/com/google/tca/domain/attestation",

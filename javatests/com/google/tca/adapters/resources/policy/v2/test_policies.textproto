@@ -1,0 +1,206 @@
+# proto-file: api/google/tca/policy/v2/tca_policy.proto
+# proto-message: google.tca.policy.v2.Policies
+#
+policies {
+  key: "publisher-1@testpublisher.com/workload-1"
+  value {
+    publisher_id: "publisher-1@testpublisher.com"
+    workload_id: "workload-1"
+    operator_domain: "example.org"
+    operator_role: "test_operator_role"
+    certificate_attributes {
+      max_certificate_validity {
+        seconds: 3600
+      }
+      x509_extensions {
+        basic_constraints {
+          ca_certificate {
+            path_len_constraint: 1
+          }
+        }
+        name_constraints {
+          permitted_subtrees {
+            uri {
+              subdomain_in_tca_domain: ".example1.org"
+            }
+          }
+          permitted_subtrees {
+            dns {
+              subdomain_in_tca_domain: "dns.example2.org"
+            }
+          }
+        }
+      }
+      certificate_subject {
+        attributes {
+          key: "2.5.4.3"
+          value: "test"
+        }
+      }
+    }
+    reference_values {
+      oak_reference_values {
+        oak_containers: {
+          root_layer: {
+            insecure: { }
+          }
+          kernel_layer: {
+            kernel: {
+              endorsement: {
+                rekor: {
+                  skip: { }
+                }
+              }
+            }
+            kernel_cmd_line_text: {
+              skip: { }
+            }
+            init_ram_fs: {
+              skip: { }
+            }
+            memory_map: {
+              skip: { }
+            }
+            acpi: {
+              skip: { }
+            }
+          }
+          system_layer: {
+            system_image: {
+              skip: { }
+            }
+          }
+          container_layer: {
+            binary: {
+              skip: { }
+            }
+            configuration: {
+              skip: { }
+            }
+          }
+        }
+      }
+    }
+    reference_values {
+      oak_reference_values {
+        oak_containers: {
+          root_layer: {
+            insecure: { }
+          }
+          kernel_layer: {
+            kernel: {
+              endorsement: {
+                rekor: {
+                  skip: { }
+                }
+              }
+            }
+            kernel_cmd_line_text: {
+              skip: { }
+            }
+            init_ram_fs: {
+              skip: { }
+            }
+            memory_map: {
+              skip: { }
+            }
+            acpi: {
+              skip: { }
+            }
+          }
+          system_layer: {
+            system_image: {
+              skip: { }
+            }
+          }
+          container_layer: {
+            binary: {
+              skip: { }
+            }
+            configuration: {
+              skip: { }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+policies {
+  key: "test-policy-2"
+  value {
+    publisher_id: "publisher-2@testpublisher.com"
+    workload_id: "workload-2"
+    operator_domain: "example.com"
+    operator_role: "test_operator_role"
+
+    reference_values {
+      oak_reference_values {
+        oak_containers: {
+          root_layer: {
+            insecure: { }
+          }
+          kernel_layer: {
+            kernel: {
+              endorsement: {
+                rekor: {
+                  skip: { }
+                }
+              }
+            }
+            kernel_cmd_line_text: {
+              skip: { }
+            }
+            init_ram_fs: {
+              skip: { }
+            }
+            memory_map: {
+              skip: { }
+            }
+            acpi: {
+              skip: { }
+            }
+          }
+          system_layer: {
+            system_image: {
+              skip: { }
+            }
+          }
+          container_layer: {
+            binary: {
+              skip: { }
+            }
+            configuration: {
+              skip: { }
+            }
+          }
+        }
+      }
+    }
+    certificate_attributes {
+      max_certificate_validity {
+        seconds: 720
+      }
+      x509_extensions {
+        basic_constraints {
+          ca_certificate {
+            path_len_constraint: 1
+          }
+        }
+        name_constraints {
+          permitted_subtrees {
+            uri {
+              subdomain_in_tca_domain: ".example2.org"
+            }
+          }
+        }
+      }
+      certificate_subject {
+        attributes {
+          key: "2.5.4.3"
+          value: "test-2"
+        }
+      }
+    }
+  }
+}

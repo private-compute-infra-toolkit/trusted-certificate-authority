@@ -23,11 +23,13 @@ import com.google.protobuf.ByteString;
 import com.google.tca.domain.policy.BasicConstraints;
 import com.google.tca.domain.policy.BasicConstraintsType;
 import com.google.tca.domain.policy.InvalidPolicyException;
+import com.google.tca.domain.policy.NameConstraint;
 import com.google.tca.domain.policy.NameConstraints;
 import com.google.tca.domain.policy.Policies;
 import com.google.tca.domain.policy.Policy;
 import com.google.tca.domain.policy.ReferenceValues;
 import com.google.tca.domain.policy.ReferenceValuesType;
+import com.google.tca.domain.policy.UriNameConstraint;
 import com.google.tca.domain.policy.X500NameAttributes;
 import com.google.tca.domain.policy.X509CertificateAttributes;
 import com.google.tca.domain.policy.X509Extensions;
@@ -36,7 +38,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-public class PolicyMapper {
+public class PolicyV1Mapper {
 
   private static final FluentLogger logger = FluentLogger.forEnclosingClass();
 
@@ -67,15 +69,29 @@ public class PolicyMapper {
       throw new IllegalArgumentException(
           "Policy should have at least one Reference Values, proto:\n" + proto);
 
-    return new Policy(
-        proto.getPublisherId(),
-        proto.getWorkloadId(),
-        proto.getTrustDomain(),
-        proto.getOperator(),
-        proto.getReferenceValuesList().stream()
-            .map(PolicyMapper::toDomain)
-            .collect(Collectors.toList()),
-        toDomain(proto.getCertificateAttributes()));
+    String operator = proto.getOperator();
+    int slashIndex = operator.indexOf('/');
+    if (slashIndex == -1) {
+      throw new IllegalArgumentException("Operator must be in 'domain/role' format: " + operator);
+    }
+    String operatorDomain = operator.substring(0, slashIndex);
+    String operatorRole = operator.substring(slashIndex + 1);
+    if (operatorDomain.isBlank() || operatorRole.isBlank()) {
+      throw new IllegalArgumentException(
+          "Operator domain and role must not be empty or blank, got: " + operator);
+    }
+
+    return Policy.builder()
+        .setPublisherId(proto.getPublisherId())
+        .setWorkloadId(proto.getWorkloadId())
+        .setOperatorDomain(operatorDomain)
+        .setOperatorRole(operatorRole)
+        .setReferenceValuesList(
+            proto.getReferenceValuesList().stream()
+                .map(PolicyV1Mapper::toDomain)
+                .collect(Collectors.toList()))
+        .setCertificateAttributes(toDomain(proto.getCertificateAttributes()))
+        .build();
   }
 
   private static X509CertificateAttributes toDomain(
@@ -114,7 +130,10 @@ public class PolicyMapper {
   }
 
   private static NameConstraints toDomain(com.google.tca.policy.v1.NameConstraints proto) {
-    return new NameConstraints(proto.getPermittedSubtreeList());
+    return new NameConstraints(
+        proto.getPermittedSubtreeList().stream()
+            .<NameConstraint>map(UriNameConstraint::new)
+            .toList());
   }
 
   private static ReferenceValues toDomain(com.google.tca.policy.v1.ReferenceValues proto) {

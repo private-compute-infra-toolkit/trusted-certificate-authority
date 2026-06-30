@@ -25,16 +25,18 @@ import com.google.tca.domain.policy.InvalidPolicyException;
 import com.google.tca.domain.policy.Policies;
 import com.google.tca.domain.policy.Policy;
 import com.google.tca.domain.policy.ReferenceValuesType;
+import com.google.tca.domain.policy.UriNameConstraint;
 import com.google.tca.domain.policy.X509Extensions;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.Duration;
 import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(Enclosed.class)
-public class PolicyMapperTest {
+public class PolicyV1MapperTest {
 
   @RunWith(JUnit4.class)
   public static class TestConversionFromTextProtoFile {
@@ -46,19 +48,22 @@ public class PolicyMapperTest {
     @Test
     public void toDomain_fromTextProto_mapsCorrectly() throws Exception {
       String textProto =
-          readTestFile("javatests/com/google/tca/adapters/resources/test_policies.textproto");
+          readTestFile(
+              "javatests/com/google/tca/adapters/resources/policy/v1/test_policies.textproto");
 
       com.google.tca.policy.v1.Policies.Builder builder =
           com.google.tca.policy.v1.Policies.newBuilder();
       TextFormat.getParser().merge(textProto, builder);
       com.google.tca.policy.v1.Policies proto = builder.build();
 
-      Policies domainPolicies = PolicyMapper.toDomain(proto);
+      Policies domainPolicies = PolicyV1Mapper.toDomain(proto);
 
       assertThat(domainPolicies.policiesMap()).hasSize(2);
-      assertThat(domainPolicies.policiesMap()).containsKey("test-policy");
+      assertThat(domainPolicies.policiesMap())
+          .containsKey("publisher-1@testpublisher.com/workload-1");
 
-      Policy firstPolicy = domainPolicies.policiesMap().get("test-policy");
+      Policy firstPolicy =
+          domainPolicies.policiesMap().get("publisher-1@testpublisher.com/workload-1");
       assertThat(firstPolicy.publisherId()).isEqualTo("publisher-1@testpublisher.com");
       assertThat(firstPolicy.certificateAttributes().certificateSubject().attributes())
           .containsExactly("2.5.4.3", "test");
@@ -69,7 +74,9 @@ public class PolicyMapperTest {
           .isEqualTo(ReferenceValuesType.OAK);
 
       assertThat(firstPolicy.certificateAttributes().maxCertificateValidity())
-          .isEqualTo(java.time.Duration.ofSeconds(3600));
+          .isEqualTo(Duration.ofSeconds(3600));
+      assertThat(firstPolicy.operatorDomain()).isEqualTo("example.org");
+      assertThat(firstPolicy.operatorRole()).isEqualTo("test_operator_role");
 
       X509Extensions extensions = firstPolicy.certificateAttributes().extensions();
       assertThat(extensions.basicConstraints()).isPresent();
@@ -78,23 +85,23 @@ public class PolicyMapperTest {
       assertThat(extensions.nameConstraints()).isPresent();
       assertThat(extensions.nameConstraints().get().permittedSubtrees().size()).isEqualTo(2);
       assertThat(extensions.nameConstraints().get().permittedSubtrees().get(0))
-          .isEqualTo(".example1.org");
+          .isEqualTo(new UriNameConstraint(".example1.org"));
       assertThat(extensions.nameConstraints().get().permittedSubtrees().get(1))
-          .isEqualTo(".example2.org");
+          .isEqualTo(new UriNameConstraint(".example2.org"));
     }
 
     @Test
     public void toDomain_fromInvalidTextProto_throwsException() throws Exception {
       String textProto =
           readTestFile(
-              "javatests/com/google/tca/adapters/resources/invalid_reference_values.textproto");
+              "javatests/com/google/tca/adapters/resources/policy/v1/invalid_reference_values.textproto");
 
       com.google.tca.policy.v1.Policies.Builder builder =
           com.google.tca.policy.v1.Policies.newBuilder();
       TextFormat.getParser().merge(textProto, builder);
       com.google.tca.policy.v1.Policies proto = builder.build();
 
-      assertThrows(InvalidPolicyException.class, () -> PolicyMapper.toDomain(proto));
+      assertThrows(InvalidPolicyException.class, () -> PolicyV1Mapper.toDomain(proto));
     }
   }
 
@@ -113,7 +120,8 @@ public class PolicyMapperTest {
           com.google.tca.policy.v1.Policy.newBuilder()
               .setPublisherId("pub1")
               .setWorkloadId("work1")
-              .setTrustDomain("trust.domain.com")
+              // trust_domain is ignored by PolicyMapper
+              .setOperator("some-operator.domain.test/some-operator-role")
               .addReferenceValues(referenceValuesProto)
               .setCertificateAttributes(
                   com.google.tca.policy.v1.X509CertificateAttributes.newBuilder()
@@ -133,7 +141,7 @@ public class PolicyMapperTest {
               .putPolicies("test-policy", policyProto)
               .build();
 
-      Policies domainPolicies = PolicyMapper.toDomain(policiesProto);
+      Policies domainPolicies = PolicyV1Mapper.toDomain(policiesProto);
 
       assertThat(domainPolicies.policiesMap()).hasSize(1);
       assertThat(domainPolicies.policiesMap()).containsKey("test-policy");
@@ -141,7 +149,8 @@ public class PolicyMapperTest {
       Policy domainPolicy = domainPolicies.policiesMap().get("test-policy");
       assertThat(domainPolicy.publisherId()).isEqualTo("pub1");
       assertThat(domainPolicy.workloadId()).isEqualTo("work1");
-      assertThat(domainPolicy.trustDomain()).isEqualTo("trust.domain.com");
+      assertThat(domainPolicy.operatorDomain()).isEqualTo("some-operator.domain.test");
+      assertThat(domainPolicy.operatorRole()).isEqualTo("some-operator-role");
       assertThat(domainPolicy.certificateAttributes().certificateSubject().attributes())
           .containsExactly("2.5.4.3", "manual-subject");
 
@@ -152,7 +161,7 @@ public class PolicyMapperTest {
           .isEqualTo(referenceValuesProto.getOakReferenceValues().toByteString());
 
       assertThat(domainPolicy.certificateAttributes().maxCertificateValidity())
-          .isEqualTo(java.time.Duration.ofSeconds(3600));
+          .isEqualTo(Duration.ofSeconds(3600));
       assertThat(domainPolicy.certificateAttributes().extensions()).isNotNull();
       assertThat(domainPolicy.certificateAttributes().extensions().basicConstraints()).isEmpty();
     }
@@ -170,6 +179,7 @@ public class PolicyMapperTest {
       com.google.tca.policy.v1.Policy policyProto =
           com.google.tca.policy.v1.Policy.newBuilder()
               .setPublisherId("pub1")
+              .setOperator("trust.domain.com/some-operator")
               .addReferenceValues(referenceValuesProto)
               .setCertificateAttributes(
                   com.google.tca.policy.v1.X509CertificateAttributes.newBuilder()
@@ -194,7 +204,7 @@ public class PolicyMapperTest {
                       .build())
               .build();
 
-      Policy domainPolicy = PolicyMapper.toDomain(policyProto);
+      Policy domainPolicy = PolicyV1Mapper.toDomain(policyProto);
 
       com.google.tca.domain.policy.X509Extensions extensions =
           domainPolicy.certificateAttributes().extensions();
@@ -207,7 +217,7 @@ public class PolicyMapperTest {
       // Name Constraints
       assertThat(extensions.nameConstraints()).isPresent();
       assertThat(extensions.nameConstraints().get().permittedSubtrees().get(0))
-          .isEqualTo("some.subdomain.example.com");
+          .isEqualTo(new UriNameConstraint("some.subdomain.example.com"));
     }
 
     @Test
@@ -223,7 +233,8 @@ public class PolicyMapperTest {
       com.google.tca.policy.v1.Policy policyProto =
           com.google.tca.policy.v1.Policy.newBuilder()
               .setPublisherId("pub1")
-              .setTrustDomain("td1")
+              // trust_domain is ignored by PolicyMapper
+              .setOperator("some-operator.domain.test/some-operator-role")
               .setWorkloadId("wl1")
               .addReferenceValues(referenceValuesProto)
               .setCertificateAttributes(
@@ -243,7 +254,7 @@ public class PolicyMapperTest {
                       .build())
               .build();
 
-      Policy domainPolicy = PolicyMapper.toDomain(policyProto);
+      Policy domainPolicy = PolicyV1Mapper.toDomain(policyProto);
 
       assertThat(domainPolicy.certificateAttributes().extensions().basicConstraints()).isPresent();
       assertThat(domainPolicy.certificateAttributes().extensions().nameConstraints()).isEmpty();
@@ -265,7 +276,8 @@ public class PolicyMapperTest {
           com.google.tca.policy.v1.Policy.newBuilder()
               .setPublisherId("pub1")
               .setWorkloadId("work1")
-              .setTrustDomain("trust.domain.com")
+              // trust_domain is ignored by PolicyMapper
+              .setOperator("some-operator.domain.test/some-operator-role")
               .addReferenceValues(referenceValuesProto)
               .setCertificateAttributes(
                   com.google.tca.policy.v1.X509CertificateAttributes.newBuilder()
@@ -291,7 +303,7 @@ public class PolicyMapperTest {
       policyBuilder.clearCertificateAttributes();
 
       assertThrows(
-          IllegalArgumentException.class, () -> PolicyMapper.toDomain(policyBuilder.build()));
+          IllegalArgumentException.class, () -> PolicyV1Mapper.toDomain(policyBuilder.build()));
     }
 
     @Test
@@ -302,7 +314,7 @@ public class PolicyMapperTest {
       policyBuilder.clearReferenceValues();
 
       assertThrows(
-          IllegalArgumentException.class, () -> PolicyMapper.toDomain(policyBuilder.build()));
+          IllegalArgumentException.class, () -> PolicyV1Mapper.toDomain(policyBuilder.build()));
     }
 
     @Test
@@ -319,7 +331,7 @@ public class PolicyMapperTest {
       builder.putPolicies("test-policy", policyBuilder.build());
       com.google.tca.policy.v1.Policies proto = builder.build();
 
-      assertThrows(InvalidPolicyException.class, () -> PolicyMapper.toDomain(proto));
+      assertThrows(InvalidPolicyException.class, () -> PolicyV1Mapper.toDomain(proto));
     }
 
     @Test
@@ -335,7 +347,7 @@ public class PolicyMapperTest {
       builder.putPolicies("test-policy", policyBuilder.build());
       com.google.tca.policy.v1.Policies proto = builder.build();
 
-      assertThrows(InvalidPolicyException.class, () -> PolicyMapper.toDomain(proto));
+      assertThrows(InvalidPolicyException.class, () -> PolicyV1Mapper.toDomain(proto));
     }
   }
 }
